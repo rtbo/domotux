@@ -1,0 +1,16 @@
+tic:
+  device_path: /dev/ttyAMA0
+  checksum_mode: 1
+  ignore:
+  - ADCO
+  - ISOUSC
+  - IMAX
+  - MOTDETAT
+mqtt:
+  device_id: linky
+  host: domotux.lan
+  port: 1883
+  topic: domotux/linky
+  qos: 0
+  retain: true
+  message_expiry: 10

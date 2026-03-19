@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Utility to work on remote host
+
+DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+if [[ -z ${RHOST} || -z ${RDIR} || -z ${RTGT} || -z ${RUSR} ]];
+then
+        echo -e "\e[1;31mRemote host variables \$RHOST, \$RDIR, \$RTGT, \$RUSR must be set\e[0m" >&2
+        exit 1
+fi
+
+# open remote shell
+open_shell() {
+        echo -e "\e[1;32mOpening shell\e[0m"
+        ssh ${RHOST} -t "cd ${RDIR} ; bash --login"
+}
+
+# cross compile package
+cross_compile() {
+        if [[ -z $1 ]];
+        then
+                echo -e "\e[1;31mPackage name must be provided\e[0m" >&2
+                exit 1
+        fi
+
+        echo -e "\e[1;32mCross compiling $1 package\e[0m"
+
+        cargo cross build --target ${RTGT} --release --package $1
+}
+
+dist() {
+        if [[ -z $1 ]];
+        then
+                echo -e "\e[1;31mPackage name must be provided\e[0m" >&2
+                exit 1
+        fi
+
+        echo -e "\e[1;32mDistributing $1 to ${RHOST}\e[0m"
+
+        STAGE_DIR=${DIR}/$1/dist
+        EXE=${DIR}/target/${RTGT}/release/$1
+        CONFIG=${DIR}/$1/$1.yml
+        SERVICE=${DIR}/$1/$1.service
+
+        if [ -f ${EXE} ]; then
+                cp ${EXE} ${STAGE_DIR}/$1
+        else
+                echo -e "\e[1;31mExecutable not found: ${EXE}\e[0m" >&2
+                exit 1
+        fi
+
+        if [ -f ${CONFIG} ]; then
+                cp ${CONFIG} ${STAGE_DIR}/$1.yml
+        else
+                echo -e "\e[1;31mConfig file not found: ${CONFIG}\e[0m" >&2
+                exit 1
+        fi
+
+        if [ -f ${SERVICE} ]; then
+                sed "s|@RDIR@|${RDIR}|g" ${SERVICE} | sed -e "s|@RUSR@|${RUSR}|g" > ${STAGE_DIR}/$1.service
+        else
+                echo -e "\e[1;31mService template not found: ${SERVICE}\e[0m" >&2
+                exit 1
+        fi
+
+        # upload to remote
+        rsync -va  ${STAGE_DIR}/ ${RHOST}:${RDIR}
+}
+
+do_on_remote() {
+        echo -e "\e[1;32mStarting app on ${RHOST}\e[0m"
+        rsync -va  ${DIR}/do ${RHOST}:${RDIR}
+        ssh ${RHOST} -t "cd ${RDIR} ; ./do ${@:2}"
+}
+
+while [ $# -gt 0 ]
+do
+        case "$1" in
+                ssh)
+                        open_shell
+                        ;;
+                compile)
+                        cross_compile $2
+                        shift
+                        ;;
+                dist)
+                        dist $2
+                        shift
+                        ;;
+                do)
+                        do_on_remote $@
+                        exit $?
+                        ;;
+                *)
+                        echo -e "\e[1;31mUnknown command: $1\e[0m" >&2
+                        echo "Usage: remote [command]" >&2
+                        echo "Available commands: ssh, compile, dist, do" >&2
+                        exit 1
+                        ;;
+        esac
+        shift
+done

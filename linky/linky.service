@@ -1,0 +1,11 @@
+[Unit]
+Description=Linky Service
+After=network.target
+
+[Service]
+ExecStart=linky
+Restart=always
+#Environment="RUST_LOG=debug"
+
+[Install]
+WantedBy=multi-user.target
