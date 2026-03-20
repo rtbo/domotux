@@ -1,0 +1,12 @@
+influx:
+  host: http://domotux.lan:8181
+  token: null
+  database: domotux
+  power: papp
+  meters: compteurs
+
+subscribe:
+  broker: domotux.lan
+  power: domotux/papp
+  meters: domotux/compteurs
+

@@ -1,0 +1,13 @@
+[Unit]
+Description=WattFlux Service
+After=network.target
+After=mosquitto.service
+After=influxdb3-core.service
+
+[Service]
+ExecStart=wattflux
+Restart=always
+# Environment="RUST_LOG=debug"
+
+[Install]
+WantedBy=multi-user.target

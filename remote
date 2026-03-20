@@ -6,98 +6,165 @@ set -e
 
 DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-if [[ -z ${RHOST} || -z ${RDIR} || -z ${RTGT} || -z ${RUSR} ]];
+if [[ -z ${HST} || -z ${USR} || -z ${DST} ]];
 then
-        echo -e "\e[1;31mRemote host variables \$RHOST, \$RDIR, \$RTGT, \$RUSR must be set\e[0m" >&2
+        echo -e "\e[1;31mHost variables \$HST, \$USR, \$DST must be set\e[0m" >&2
+        echo -e \$TGT can also be set for cross compilation
+        echo -e You can also set override per service e.g. \$wattflux_HST, \$linky_TGT
         exit 1
 fi
 
 # open remote shell
 open_shell() {
+        local service_HST="${service}_HST"
+        _HST=${!service_HST:-$HST}
+        local service_DST="${service}_DST"
+        _DST=${!service_DST:-$DST}
+
         echo -e "\e[1;32mOpening shell\e[0m"
-        ssh ${RHOST} -t "cd ${RDIR} ; bash --login"
+        ssh ${_HST} -t "cd ${_DST} ; bash --login"
 }
 
-# cross compile package
-cross_compile() {
-        if [[ -z $1 ]];
+clean_service() {
+        if [[ -z ${service} ]];
         then
-                echo -e "\e[1;31mPackage name must be provided\e[0m" >&2
+                echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
                 exit 1
         fi
 
-        echo -e "\e[1;32mCross compiling $1 package\e[0m"
-
-        cargo cross build --target ${RTGT} --release --package $1
+        echo -e "Cleaning service \e[1;32m${service}\e[0m"
+        cargo clean --package ${service}
+        rm -rf ${service}/dist
 }
 
-dist() {
-        if [[ -z $1 ]];
+compile_service() {
+        if [[ -z ${service} ]];
         then
-                echo -e "\e[1;31mPackage name must be provided\e[0m" >&2
+                echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
                 exit 1
         fi
 
-        echo -e "\e[1;32mDistributing $1 to ${RHOST}\e[0m"
+        local service_TGT="${service}_TGT"
+        _TGT=${!service_TGT:-$TGT}
 
-        STAGE_DIR=${DIR}/$1/dist
-        EXE=${DIR}/target/${RTGT}/release/$1
-        CONFIG=${DIR}/$1/$1.yml
-        SERVICE=${DIR}/$1/$1.service
-
-        if [ -f ${EXE} ]; then
-                cp ${EXE} ${STAGE_DIR}/$1
+        if [[ -z ${_TGT} ]];
+        then
+                echo -e "Compiling service \e[1;32m${service}\e[0m"
+                cargo build --release --package ${service}
         else
-                echo -e "\e[1;31mExecutable not found: ${EXE}\e[0m" >&2
+                echo -e "Cross compiling service \e[1;32m${service}\e[0m for target \e[1;32m${_TGT}\e[0m"
+                cargo cross build --target ${_TGT} --release --package ${service}
+        fi
+}
+
+dist_service() {
+        if [[ -z ${service} ]];
+        then
+                echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
                 exit 1
         fi
 
-        if [ -f ${CONFIG} ]; then
-                cp ${CONFIG} ${STAGE_DIR}/$1.yml
+        local service_HST="${service}_HST"
+        _HST=${!service_HST:-$HST}
+        local service_DST="${service}_DST"
+        _DST=${!service_DST:-$DST}
+        local service_TGT="${service}_TGT"
+        _TGT=${!service_TGT:-$TGT}
+
+        if [[ -z ${_TGT} ]];
+        then
+                bin_path=target/release/${service}
         else
-                echo -e "\e[1;31mConfig file not found: ${CONFIG}\e[0m" >&2
+                bin_path=target/${_TGT}/release/${service}
+        fi
+
+        if [[ ! -f ${bin_path} ]];
+        then
+                echo -e "\e[1;31mBinary not found at ${bin_path}, please compile the service first\e[0m" >&2
                 exit 1
         fi
 
-        if [ -f ${SERVICE} ]; then
-                sed "s|@RDIR@|${RDIR}|g" ${SERVICE} | sed -e "s|@RUSR@|${RUSR}|g" > ${STAGE_DIR}/$1.service
-        else
-                echo -e "\e[1;31mService template not found: ${SERVICE}\e[0m" >&2
-                exit 1
+        mkdir -p ${service}/dist
+        cp -u ${bin_path} ${service}/dist/
+
+        if [[ -f ${service}/${service}.service ]];
+        then
+                cp -u ${service}/${service}.service ${service}/dist/
+        fi
+        if [[ -f ${service}/${service}.yml ]];
+        then
+                cp -u ${service}/${service}.yml ${service}/dist/
         fi
 
         # upload to remote
-        rsync -va  ${STAGE_DIR}/ ${RHOST}:${RDIR}
+        rsync -va  ${service}/dist/ ${_HST}:${_DST}
 }
 
-do_on_remote() {
-        echo -e "\e[1;32mStarting app on ${RHOST}\e[0m"
-        rsync -va  ${DIR}/do ${RHOST}:${RDIR}
-        ssh ${RHOST} -t "cd ${RDIR} ; ./do ${@:2}"
+install_service() {
+        if [[ -z ${service} ]];
+        then
+                echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
+                exit 1
+        fi
+
+        echo -e "Installing \e[1;32m${service}\e[0m service"
+
+        local service_HST="${service}_HST"
+        _HST=${!service_HST:-$HST}
+        local service_DST="${service}_DST"
+        _DST=${!service_DST:-$DST}
+        local service_TGT="${service}_TGT"
+        _TGT=${!service_TGT:-$TGT}
+
+        ssh ${_HST} 'bash -s' <<EOF
+                cd ${_DST}
+                if [[ ! -f ${service}.service || ! -f ${service} ]];
+                then
+                        echo -e "\e[1;31mService files not found in ${_DST}, please upload the service first\e[0m" >&2
+                        exit 1
+                fi
+
+                echo -e "\e[1;32mInstalling ${service} service\e[0m"
+                sudo install ${service} /usr/local/bin/${service}
+                sudo install ${service}.service /etc/systemd/system/${service}.service
+                if [[ -f ${service}.yml ]];
+                then
+                        sudo install ${service}.yml /etc/${service}.yml
+                fi
+                sudo systemctl daemon-reload
+EOF
 }
+
+export service=
 
 while [ $# -gt 0 ]
 do
         case "$1" in
+                linky)
+                        service=linky
+                        ;;
+                wattflux)
+                        service=wattflux
+                        ;;
                 ssh)
                         open_shell
                         ;;
+                clean)
+                        clean_service
+                        ;;
                 compile)
-                        cross_compile $2
-                        shift
+                        compile_service
                         ;;
                 dist)
-                        dist $2
-                        shift
+                        dist_service
                         ;;
-                do)
-                        do_on_remote $@
-                        exit $?
+                install)
+                        install_service
                         ;;
                 *)
-                        echo -e "\e[1;31mUnknown command: $1\e[0m" >&2
+                        echo -e "\e[1;31mUnknown command or service: $1\e[0m" >&2
                         echo "Usage: remote [command]" >&2
-                        echo "Available commands: ssh, compile, dist, do" >&2
+                        echo "Available commands: ssh, compile, dist, clean" >&2
                         exit 1
                         ;;
         esac

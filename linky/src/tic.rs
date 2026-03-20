@@ -1,34 +1,11 @@
-use std::time::Duration;
+use std::{fmt, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt},
     sync,
 };
-use tokio_serial::SerialStream;
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(untagged)]
-pub enum TicValue {
-    Integer(i64),
-    Float(f64),
-    String(String),
-}
-
-impl TicValue {
-    pub fn from_str(s: &str) -> TicValue {
-        if let Ok(i) = s.parse::<i64>() {
-            TicValue::Integer(i)
-        } else if let Ok(f) = s.parse::<f64>() {
-            TicValue::Float(f)
-        } else {
-            TicValue::String(s.to_string())
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct TicFrame(pub Vec<(String, TicValue)>);
+use tokio_serial::{DataBits, Parity, SerialStream, StopBits};
 
 /// Configuration for the TIC reader
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,7 +14,7 @@ pub struct Config {
     device_path: String,
     /// Mode to calculate checksum (1 or 2)
     checksum_mode: u32,
-    /// Fields to be ignored during reading
+    /// Fields to be ignored
     ignore: Vec<String>,
 }
 
@@ -51,7 +28,41 @@ impl Default for Config {
                 "ISOUSC".to_string(),
                 "IMAX".to_string(),
                 "MOTDETAT".to_string(),
+                "OPTARIF".to_string(),
+                // Couleur du lendemain.
+                // Arrive à 20H sur le TIC, on peut l'avoir dès 11H avec service web.
+                "DEMAIN".to_string(),
             ],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Value {
+    Integer(i32),
+    Float(f32),
+    String(String),
+}
+
+impl Value {
+    pub fn from_str(s: &str) -> Self {
+        if let Ok(i) = s.parse::<i32>() {
+            Value::Integer(i)
+        } else if let Ok(f) = s.parse::<f32>() {
+            Value::Float(f)
+        } else {
+            Value::String(s.to_string())
+        }
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Integer(i) => write!(f, "{}", i),
+            Value::Float(fl) => write!(f, "{}", fl),
+            Value::String(s) => write!(f, "{}", s),
         }
     }
 }
@@ -61,17 +72,17 @@ fn compute_checksum(data: &[u8]) -> u8 {
     (s1 & 0x3F) + 0x20
 }
 
-pub async fn read_frames(
+pub async fn read_loop(
     cfg: Config,
-    tx: sync::mpsc::Sender<TicFrame>,
+    tx: sync::mpsc::Sender<Vec<(String, Value)>>,
 ) -> Result<(), anyhow::Error> {
     log::debug!("Starting TIC reader with config: {:?}", cfg);
 
     let dev = SerialStream::open(
         &tokio_serial::new(&cfg.device_path, 1200)
-            .data_bits(tokio_serial::DataBits::Seven)
-            .parity(tokio_serial::Parity::Even)
-            .stop_bits(tokio_serial::StopBits::One)
+            .data_bits(DataBits::Seven)
+            .parity(Parity::Even)
+            .stop_bits(StopBits::One)
             .timeout(Duration::from_millis(1000)),
     )?;
     let mut reader = tokio::io::BufReader::new(dev);
@@ -90,6 +101,7 @@ pub async fn read_frames(
     };
 
     let mut buf = Vec::new();
+    let mut last_len = 16;
 
     'frame: loop {
         log::debug!("Waiting for start of frame...");
@@ -105,8 +117,7 @@ pub async fn read_frames(
         }
 
         log::debug!("Start of frame detected");
-
-        let mut fields = Vec::new();
+        let mut fields = Vec::with_capacity(last_len);
 
         'field: loop {
             buf.clear();
@@ -143,37 +154,35 @@ pub async fn read_frames(
             let sep = frame[frame.len() - 3];
             let mut parts = frame.split(|&b| b == sep);
 
-            let label = parts.next().and_then(|s| str::from_utf8(s).ok());
-            if let Some(label_str) = label {
-                if cfg.ignore.iter().any(|ignore| ignore == label_str) {
-                    continue 'field;
-                }
+            let Some(label) = parts.next().and_then(|s| str::from_utf8(s).ok()) else {
+                log::warn!("Ignoring non-ASCII field label: {:?}", buf);
+                continue 'frame;
+            };
+
+            if cfg.ignore.iter().any(|f| f == label) {
+                continue 'field;
             }
 
-            let value = parts.next().and_then(|s| str::from_utf8(s).ok());
-
-            let (label, value) = match (label, value) {
-                (Some(l), Some(v)) if !l.is_empty() && !v.is_empty() => {
-                    (l.to_string(), TicValue::from_str(v))
-                }
-                (Some(_), Some(_)) => {
-                    log::warn!("Ignoring empty label or value");
-                    continue 'frame;
-                }
-                (_, _) => {
-                    log::warn!("Ignoring non-ASCII field: {:?}", buf);
-                    continue 'frame;
-                }
+            let Some(value) = parts.next().and_then(|s| str::from_utf8(s).ok()) else {
+                log::warn!("Ignoring non-ASCII field value: {:?}", buf);
+                continue 'frame;
             };
+
+            if label.is_empty() || value.is_empty() {
+                log::warn!("Ignoring empty label or value: {:?}", buf);
+                continue 'frame;
+            }
+
+            let label = label.to_string();
+            let value = Value::from_str(value);
 
             log::debug!("Parsed field: {} = {:?}", label, value);
             fields.push((label, value));
         }
 
-        let tic_frame = TicFrame(fields);
-        log::debug!("Completed frame: {:?}", tic_frame);
-        tx.send(tic_frame.clone())
+        last_len = fields.len();
+        tx.send(fields)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to send TIC frame through channel: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to send TIC field through channel: {}", e))?;
     }
 }

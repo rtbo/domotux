@@ -6,11 +6,27 @@ tic:
   - ISOUSC
   - IMAX
   - MOTDETAT
-mqtt:
-  device_id: linky
-  host: domotux.lan
-  port: 1883
-  topic: domotux/linky
-  qos: 0
-  retain: true
-  message_expiry: 10
+  - OPTARIF
+  - DEMAIN
+
+publish:
+  broker: domotux.lan
+  power:
+    topic: domotux/papp
+    tic_field: PAPP
+  meters:
+    min_interval: 60
+    topic: domotux/compteurs
+    active_meter: PTEC
+    meters:
+      BASE: TH
+      HCHC: HC
+      HCHP: HP
+      EJPHN: HN
+      EJPHPM: PM
+      BBRHCJB: HCJB
+      BBRHPJB: HPJB
+      BBRHCJW: HCJW
+      BBRHPJW: HPJW
+      BBRHCJR: HCJR
+      BBRHPJR: HPJR

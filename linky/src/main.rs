@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::process;
 
 use clap::Parser;
@@ -5,14 +6,24 @@ use serde::{Deserialize, Serialize};
 use tokio::sync;
 use tokio::time::{Duration, sleep};
 
-mod mqtt;
+mod publish;
 mod tic;
 
 /// Configuration for the Linky application
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Config {
     tic: tic::Config,
-    mqtt: mqtt::Config,
+    publish: publish::Config,
+}
+
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            tic: tic::Config::default(),
+            publish: publish::Config::default(),
+        }
+    }
 }
 
 #[derive(Debug, Parser)]
@@ -21,7 +32,7 @@ struct Cli {
     default_config: bool,
 
     #[clap(short, long)]
-    config_file: Option<String>,
+    config_file: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -39,39 +50,23 @@ async fn main() -> process::ExitCode {
     }
 }
 
-fn read_config<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, anyhow::Error> {
-    let config_contents = std::fs::read_to_string(path)
-        .map_err(|e| anyhow::anyhow!("Failed to read config file {}: {}", path, e))?;
-    let config: T = serde_yml::from_str(&config_contents)
-        .map_err(|e| anyhow::anyhow!("Failed to parse config file {}: {}", path, e))?;
-    Ok(config)
-}
 
 async fn run(cli: Cli) -> Result<(), anyhow::Error> {
     if cli.default_config {
-        let example_config = Config::default();
-        let yaml = serde_yml::to_string(&example_config)
-            .map_err(|e| anyhow::anyhow!("YAML error: {}", e))?;
-        println!("{}", yaml);
-        return Ok(());
+        return base::cfg::print_default_config::<Config>();
     }
 
-    let config_file = cli
-        .config_file
-        .as_deref()
-        .unwrap_or("/etc/linky.yml");
-
-    let config: Config = read_config(config_file).unwrap_or_else(|_| Config::default());
+    let config: Config = base::cfg::load_config("linky", cli.config_file).await?;
     let Config {
         tic: tic_cfg,
-        mqtt: mqtt_cfg,
+        publish: publish_cfg,
     } = config;
 
-    let mqtt_options = mqtt::make_options(&mqtt_cfg);
-    log::debug!("MQTT options: {:?}", mqtt_options);
-    let (mqtt_client, mut mqtt_evloop) = rumqttc::v5::AsyncClient::new(mqtt_options, 10);
+    let (mut mqtt_client, mut mqtt_evloop) = publish::Client::new(publish_cfg);
 
     let (mpsc_tx, mut mpsc_rx) = sync::mpsc::channel(100);
+    let mut tic_handle = tokio::spawn(async move { tic::read_loop(tic_cfg, mpsc_tx).await });
+
 
     let mut mqtt_handle = tokio::spawn(async move {
         loop {
@@ -87,13 +82,13 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
         }
     });
 
-    let mut tic_handle = tokio::spawn(async move { tic::read_frames(tic_cfg, mpsc_tx).await });
-
     loop {
         tokio::select! {
-            Some(frame) = mpsc_rx.recv() => {
-                log::debug!("Publishing frame: {:?}", frame);
-                mqtt::publish_frame(&mqtt_client, &mqtt_cfg, &frame).await?;
+            Some(tic_frame) = mpsc_rx.recv() => {
+                log::debug!("Received TIC update: {:?}", tic_frame);
+                if let Err(e) = mqtt_client.publish(tic_frame).await {
+                    log::warn!("Failed to publish MQTT message: {}", e);
+                }
             }
             result = &mut tic_handle => {
                 match result {
