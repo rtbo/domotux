@@ -2,13 +2,8 @@ tic:
   device_path: /dev/ttyAMA0
   checksum_mode: 1
   ignore:
-  - ADCO
-  - ISOUSC
-  - IMAX
   - MOTDETAT
-  - OPTARIF
   - DEMAIN
-
 publish:
   broker: domotux.lan
   power:
@@ -30,3 +25,12 @@ publish:
       BBRHPJW: HPJW
       BBRHCJR: HCJR
       BBRHPJR: HPJR
+  contract:
+    min_interval: 86400
+    topic_prefix: domotux/contrat
+    fields:
+    - ADCO
+    - OPTARIF
+    - ISOUSC
+    - IMAX
+

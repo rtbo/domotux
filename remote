@@ -124,7 +124,6 @@ install_service() {
                         exit 1
                 fi
 
-                echo -e "\e[1;32mInstalling ${service} service\e[0m"
                 sudo install ${service} /usr/local/bin/${service}
                 sudo install ${service}.service /etc/systemd/system/${service}.service
                 if [[ -f ${service}.yml ]];
@@ -132,6 +131,123 @@ install_service() {
                         sudo install ${service}.yml /etc/${service}.yml
                 fi
                 sudo systemctl daemon-reload
+EOF
+}
+
+start_service() {
+        if [[ -z ${service} ]];
+        then
+                echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
+                exit 1
+        fi
+
+        echo -e "Starting \e[1;32m${service}\e[0m service"
+
+        local service_HST="${service}_HST"
+        _HST=${!service_HST:-$HST}
+        local service_DST="${service}_DST"
+        _DST=${!service_DST:-$DST}
+        local service_TGT="${service}_TGT"
+        _TGT=${!service_TGT:-$TGT}
+
+        ssh ${_HST} 'bash -s' <<EOF
+                cd ${_DST}
+                if [[ ! -f ${service}.service || ! -f ${service} ]];
+                then
+                        echo -e "\e[1;31mService files not found in ${_DST}, please upload the service first\e[0m" >&2
+                        exit 1
+                fi
+
+                sudo systemctl start ${service}
+                sudo systemctl enable ${service}
+EOF
+}
+
+stop_service() {
+        if [[ -z ${service} ]];
+        then
+                echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
+                exit 1
+        fi
+
+        echo -e "Stopping \e[1;32m${service}\e[0m service"
+
+        local service_HST="${service}_HST"
+        _HST=${!service_HST:-$HST}
+        local service_DST="${service}_DST"
+        _DST=${!service_DST:-$DST}
+        local service_TGT="${service}_TGT"
+        _TGT=${!service_TGT:-$TGT}
+
+        ssh ${_HST} 'bash -s' <<EOF
+                cd ${_DST}
+                if [[ ! -f ${service}.service || ! -f ${service} ]];
+                then
+                        echo -e "\e[1;31mService files not found in ${_DST}, please upload the service first\e[0m" >&2
+                        exit 1
+                fi
+
+                sudo systemctl stop ${service}
+                sudo systemctl disable ${service}
+EOF
+}
+
+restart_service() {
+        if [[ -z ${service} ]];
+        then
+                echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
+                exit 1
+        fi
+
+        echo -e "Restarting \e[1;32m${service}\e[0m service"
+
+        local service_HST="${service}_HST"
+        _HST=${!service_HST:-$HST}
+        local service_DST="${service}_DST"
+        _DST=${!service_DST:-$DST}
+        local service_TGT="${service}_TGT"
+        _TGT=${!service_TGT:-$TGT}
+
+        ssh ${_HST} 'bash -s' <<EOF
+                cd ${_DST}
+                if [[ ! -f ${service}.service || ! -f ${service} ]];
+                then
+                        echo -e "\e[1;31mService files not found in ${_DST}, please upload the service first\e[0m" >&2
+                        exit 1
+                fi
+
+                sudo systemctl restart ${service}
+EOF
+}
+
+service_status() {
+        if [[ -z ${service} ]];
+        then
+                echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
+                exit 1
+        fi
+
+        echo -e "Sleeping for 1 second to let journal catch up with service status changes"
+        sleep 1
+
+        echo -e "Checking status of \e[1;32m${service}\e[0m service"
+
+        local service_HST="${service}_HST"
+        _HST=${!service_HST:-$HST}
+        local service_DST="${service}_DST"
+        _DST=${!service_DST:-$DST}
+        local service_TGT="${service}_TGT"
+        _TGT=${!service_TGT:-$TGT}
+
+        ssh ${_HST} 'bash -s' <<EOF
+                cd ${_DST}
+                if [[ ! -f ${service}.service || ! -f ${service} ]];
+                then
+                        echo -e "\e[1;31mService files not found in ${_DST}, please upload the service first\e[0m" >&2
+                        exit 1
+                fi
+
+                sudo systemctl status ${service}
 EOF
 }
 
@@ -160,6 +276,18 @@ do
                         ;;
                 install)
                         install_service
+                        ;;
+                start)
+                        start_service
+                        ;;
+                stop)
+                        stop_service
+                        ;;
+                restart)
+                        restart_service
+                        ;;
+                status)
+                        service_status
                         ;;
                 *)
                         echo -e "\e[1;31mUnknown command or service: $1\e[0m" >&2

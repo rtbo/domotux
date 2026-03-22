@@ -49,6 +49,10 @@ impl<T> VecMap<T> {
         self.0.is_empty()
     }
 
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &(String, T)> {
         self.0.iter()
     }
