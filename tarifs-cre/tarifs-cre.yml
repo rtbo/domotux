@@ -1,0 +1,8 @@
+contract: !Mqtt
+  broker: domotux.lan
+  topic: domotux/contract/#
+cre_db:
+  validity: 86400
+server:
+  bind_address: '0.0.0.0:8080'
+

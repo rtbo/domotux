@@ -15,7 +15,7 @@ fn unique_dev_id(base: &str) -> String {
 
     let random_suffix: String = rand::rng()
         .sample_iter(&rand::distr::Alphanumeric)
-        .take(8)
+        .take(4)
         .map(char::from)
         .collect();
     format!("{}-{}", base, random_suffix)
@@ -38,7 +38,7 @@ impl fmt::Display for BrokerAddress {
 }
 
 impl FromStr for BrokerAddress {
-    type Err = String;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (host, port) = match s.rsplit_once(':') {
@@ -47,10 +47,10 @@ impl FromStr for BrokerAddress {
         };
 
         if host.is_empty() {
-            return Err("Broker host cannot be empty".to_string());
+            return Err(anyhow::anyhow!("Broker host cannot be empty"));
         }
 
-        let port = port.map_err(|_| "Broker port must be a valid port number".to_string())?;
+        let port = port.map_err(|_| anyhow::anyhow!("Broker port must be a valid port number"))?;
 
         Ok(Self {
             host: host.to_string(),

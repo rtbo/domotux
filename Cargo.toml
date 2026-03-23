@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["base", "linky", "wattflux"]
+members = ["base", "linky", "tarifs-cre", "wattflux"]
 
 [workspace.dependencies]
 base = { path = "base" }
@@ -9,6 +9,7 @@ anyhow = "1.0.102"
 clap = { version = "4.6.0", features = ["derive"] }
 env_logger = "0.11.9"
 log = "0.4.29"
+reqwest = { version="0.13.2", features=["json", "query"]}
 rumqttc = "0.25.1"
 serde = { version = "1.0.228", features = ["serde_derive"] }
 serde_json = "1.0.149"

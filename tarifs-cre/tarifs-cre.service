@@ -1,0 +1,11 @@
+[Unit]
+Description=Tarifs CRE
+After=network.target
+
+[Service]
+ExecStart=tarifs-cre
+Restart=always
+#Environment="RUST_LOG=debug"
+
+[Install]
+WantedBy=multi-user.target

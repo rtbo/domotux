@@ -253,15 +253,11 @@ EOF
 
 export service=
 
+known_services=(linky wattflux tarifs-cre)
+
 while [ $# -gt 0 ]
 do
         case "$1" in
-                linky)
-                        service=linky
-                        ;;
-                wattflux)
-                        service=wattflux
-                        ;;
                 ssh)
                         open_shell
                         ;;
@@ -290,10 +286,15 @@ do
                         service_status
                         ;;
                 *)
-                        echo -e "\e[1;31mUnknown command or service: $1\e[0m" >&2
-                        echo "Usage: remote [command]" >&2
-                        echo "Available commands: ssh, compile, dist, clean" >&2
+                        if [[ ! " ${known_services[*]} " =~ " ${1} " ]];
+                        then
+                                service=$1
+                        else
+                                echo -e "\e[1;31mUnknown command or service: $1\e[0m" >&2
+                                echo "Usage: remote [command]" >&2
+                                echo "Available commands: ssh, compile, dist, clean" >&2
                         exit 1
+                        fi
                         ;;
         esac
         shift
