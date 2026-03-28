@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["base", "linky", "tarifs-cre", "wattflux"]
+members = ["base", "domotux", "linky", "tarifs-cre", "wattflux"]
 
 [workspace.dependencies]
 base = { path = "base" }
