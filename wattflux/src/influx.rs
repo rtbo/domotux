@@ -13,7 +13,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            host: "http://domotux.lan:8181".to_string(),
+            host: "http://localhost:8181".to_string(),
             token: None,
             database: "domotux".to_string(),
             power: "papp".to_string(),

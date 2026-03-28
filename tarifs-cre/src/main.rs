@@ -5,7 +5,6 @@ use axum::Router;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::routing::get;
-use base::mqtt::BrokerAddress;
 use chrono::{FixedOffset, NaiveDateTime, TimeZone};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
@@ -40,10 +39,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             contract: contract::Config::Mqtt {
-                broker: BrokerAddress {
-                    host: "domotux.lan".to_string(),
-                    port: 1883,
-                },
+                broker: Default::default(),
                 topic: "domotux/contract/#".to_string(),
             },
             cre_db: CreDbConfig {

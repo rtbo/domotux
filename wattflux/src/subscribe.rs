@@ -15,10 +15,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            broker: base::mqtt::BrokerAddress {
-                host: "localhost".to_string(),
-                port: 1883,
-            },
+            broker: Default::default(),
             power: "domotux/papp".to_string(),
             meters: "domotux/compteurs".to_string(),
         }

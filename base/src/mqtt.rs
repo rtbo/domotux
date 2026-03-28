@@ -59,6 +59,15 @@ impl FromStr for BrokerAddress {
     }
 }
 
+impl Default for BrokerAddress {
+    fn default() -> Self {
+        Self {
+            host: "localhost".to_string(),
+            port: 1883,
+        }
+    }
+}
+
 impl Serialize for BrokerAddress {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
