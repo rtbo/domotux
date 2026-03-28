@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Utility to work on locally
+
+DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+prog=$0
+
+service=
+known_services=(all linky wattflux tarifs-cre)
+
+gen_config() {
+        if [[ -z ${service} ]];
+        then
+                echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
+                exit 1
+        fi
+
+        if [[ ${service} == "all" ]];
+        then
+                echo -e "\e[1;31mGenerating default config for all services\e[0m"
+                for s in ${known_services[@]};
+                do
+                        if [[ ${s} != "all" ]];
+                        then
+                                service=${s}
+                                gen_config
+                        fi
+                done
+                return
+        fi
+
+        echo -e "Generating default config for \e[1;32m${service}\e[0m service"
+        cargo run --package ${service} -- --default-config > ${service}/${service}.yml
+}
+
+
+while [ $# -gt 0 ]
+do
+        case "$1" in
+                gen-config)
+                        gen_config
+                        ;;
+                *)
+                        if [[ " ${known_services[*]} " =~ " ${1} " ]];
+                        then
+                                service=$1
+                        else
+                                echo -e "\e[1;31mUnknown service or command: $1\e[0m" >&2
+                                echo "Usage: ${prog} [service] [command]" >&2
+                                echo "Available services: ${known_services[*]}"
+                                echo "Available commands: ssh compile dist clean" >&2
+                                exit 1
+                        fi
+                        ;;
+        esac
+        shift
+done
