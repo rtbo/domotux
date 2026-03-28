@@ -2,4 +2,4 @@
 */dist/
 notes.txt
 *.env
-*.yml
+*/*.yml
