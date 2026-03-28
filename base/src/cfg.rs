@@ -1,5 +1,5 @@
-use std::{path::PathBuf, time::Duration};
 use serde::{Deserialize, Serialize};
+use std::{path::PathBuf, time::Duration};
 use tokio::fs;
 
 pub fn print_default_config<C>() -> Result<(), anyhow::Error>
@@ -12,54 +12,100 @@ where
     Ok(())
 }
 
-pub async fn load_config<C>(service_name: &str, cfg_path: Option<PathBuf>) -> Result<C, anyhow::Error>
+pub async fn load_config<C>(
+    service_name: &str,
+    cfg_path: Option<PathBuf>,
+) -> Result<C, anyhow::Error>
 where
     C: for<'de> Deserialize<'de> + Default,
 {
     let config_file = if let Some(p) = cfg_path {
         Some(p)
-    } else if let Some(env_path) = std::env::var_os(format!("{}_CONFIG_PATH", service_name.to_uppercase())) {
-        Some(PathBuf::from(env_path))
     } else {
         find_config_file(service_name)
     };
 
     if let Some(config_file) = config_file {
-        let config_contents = fs::read_to_string(&config_file)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to read config file {}: {}", config_file.display(), e))?;
-        let config: C = serde_yml::from_str(&config_contents)
-            .map_err(|e| anyhow::anyhow!("Failed to parse config file {}: {}", config_file.display(), e))?;
+        let config_contents = fs::read_to_string(&config_file).await.map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to read config file {}: {}",
+                config_file.display(),
+                e
+            )
+        })?;
+        let config: C = serde_yml::from_str(&config_contents).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to parse config file {}: {}",
+                config_file.display(),
+                e
+            )
+        })?;
         Ok(config)
     } else {
         Ok(C::default())
     }
 }
 
+pub async fn save_config<C>(
+    service_name: &str,
+    config: &C,
+    cfg_path: Option<PathBuf>,
+) -> Result<(), anyhow::Error>
+where
+    C: Serialize,
+{
+    let config_file = if let Some(p) = cfg_path {
+        Some(p)
+    } else {
+        dirs::config_local_dir().map(|dir| dir.join(format!("{}.yml", service_name)))
+    };
+
+    if let Some(config_file) = config_file {
+        let yaml = serde_yml::to_string(config)?;
+        fs::write(&config_file, yaml).await.map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to write config file {}: {}",
+                config_file.display(),
+                e
+            )
+        })?;
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("No config file path specified"))
+    }
+}
+
 fn find_config_file(service_name: &str) -> Option<PathBuf> {
     let filename = format!("{}.yml", service_name);
-    if let Some(file) = check_config_path(dirs::config_local_dir()?.join(&filename)) {
+    if let Some(file) =
+        check_config_path(dirs::config_local_dir().map(|dir| dir.join(&filename)))
+    {
         return Some(file);
     }
-    if let Some(file) = check_config_path(dirs::config_dir()?.join(&filename)) {
+    if let Some(file) =
+        check_config_path(dirs::config_dir().map(|dir| dir.join(&filename)))
+    {
         return Some(file);
     }
-    if let Some(file) = check_config_path(dirs::home_dir()?.join(format!(".{}", filename))) {
+    if let Some(file) =
+        check_config_path(dirs::home_dir().map(|dir| dir.join(format!(".{}", filename))))
+    {
         return Some(file);
     }
     #[cfg(target_os = "linux")]
-    if let Some(file) = check_config_path(PathBuf::from("/etc").join(&filename)) {
+    if let Some(file) = check_config_path(Some(PathBuf::from("/etc").join(&filename))) {
         return Some(file);
     }
     None
 }
 
-fn check_config_path(path: PathBuf) -> Option<PathBuf> {
-    if path.exists() {
-        Some(path)
-    } else {
-        None
+fn check_config_path(path: Option<PathBuf>) -> Option<PathBuf> {
+    if let Some(p) = path {
+        if p.exists() {
+            return Some(p);
+        }
     }
+    None
 }
 
 /// Custom serializer for Duration that serializes as seconds
