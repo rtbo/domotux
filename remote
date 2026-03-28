@@ -14,12 +14,18 @@ then
         exit 1
 fi
 
+get_service_config() {
+        local service_HST="${service//-/_}_HST"
+        _HST=${!service_HST:-$HST}
+        local service_DST="${service//-/_}_DST"
+        _DST=${!service_DST:-$DST}
+        local service_TGT="${service//-/_}_TGT"
+        _TGT=${!service_TGT:-$TGT}
+}
+
 # open remote shell
 open_shell() {
-        local service_HST="${service}_HST"
-        _HST=${!service_HST:-$HST}
-        local service_DST="${service}_DST"
-        _DST=${!service_DST:-$DST}
+        get_service_config
 
         echo -e "\e[1;32mOpening shell\e[0m"
         ssh ${_HST} -t "cd ${_DST} ; bash --login"
@@ -44,8 +50,7 @@ compile_service() {
                 exit 1
         fi
 
-        local service_TGT="${service}_TGT"
-        _TGT=${!service_TGT:-$TGT}
+        get_service_config
 
         if [[ -z ${_TGT} ]];
         then
@@ -64,12 +69,9 @@ dist_service() {
                 exit 1
         fi
 
-        local service_HST="${service}_HST"
-        _HST=${!service_HST:-$HST}
-        local service_DST="${service}_DST"
-        _DST=${!service_DST:-$DST}
-        local service_TGT="${service}_TGT"
-        _TGT=${!service_TGT:-$TGT}
+        get_service_config
+
+        echo -e "Distributing service \e[1;32m${service}\e[0m to \e[1;32m${_HST}\e[0m:\e[1;32m${_DST}\e[0m"
 
         if [[ -z ${_TGT} ]];
         then
@@ -109,12 +111,7 @@ install_service() {
 
         echo -e "Installing \e[1;32m${service}\e[0m service"
 
-        local service_HST="${service}_HST"
-        _HST=${!service_HST:-$HST}
-        local service_DST="${service}_DST"
-        _DST=${!service_DST:-$DST}
-        local service_TGT="${service}_TGT"
-        _TGT=${!service_TGT:-$TGT}
+        get_service_config
 
         ssh ${_HST} 'bash -s' <<EOF
                 cd ${_DST}
@@ -129,6 +126,8 @@ install_service() {
                 if [[ -f ${service}.yml ]];
                 then
                         sudo install ${service}.yml /etc/${service}.yml
+                else
+                        sudo rm -f /etc/${service}.yml
                 fi
                 sudo systemctl daemon-reload
 EOF
@@ -143,12 +142,7 @@ start_service() {
 
         echo -e "Starting \e[1;32m${service}\e[0m service"
 
-        local service_HST="${service}_HST"
-        _HST=${!service_HST:-$HST}
-        local service_DST="${service}_DST"
-        _DST=${!service_DST:-$DST}
-        local service_TGT="${service}_TGT"
-        _TGT=${!service_TGT:-$TGT}
+        get_service_config
 
         ssh ${_HST} 'bash -s' <<EOF
                 cd ${_DST}
@@ -172,12 +166,7 @@ stop_service() {
 
         echo -e "Stopping \e[1;32m${service}\e[0m service"
 
-        local service_HST="${service}_HST"
-        _HST=${!service_HST:-$HST}
-        local service_DST="${service}_DST"
-        _DST=${!service_DST:-$DST}
-        local service_TGT="${service}_TGT"
-        _TGT=${!service_TGT:-$TGT}
+        get_service_config
 
         ssh ${_HST} 'bash -s' <<EOF
                 cd ${_DST}
@@ -201,12 +190,7 @@ restart_service() {
 
         echo -e "Restarting \e[1;32m${service}\e[0m service"
 
-        local service_HST="${service}_HST"
-        _HST=${!service_HST:-$HST}
-        local service_DST="${service}_DST"
-        _DST=${!service_DST:-$DST}
-        local service_TGT="${service}_TGT"
-        _TGT=${!service_TGT:-$TGT}
+        get_service_config
 
         ssh ${_HST} 'bash -s' <<EOF
                 cd ${_DST}
@@ -232,12 +216,7 @@ service_status() {
 
         echo -e "Checking status of \e[1;32m${service}\e[0m service"
 
-        local service_HST="${service}_HST"
-        _HST=${!service_HST:-$HST}
-        local service_DST="${service}_DST"
-        _DST=${!service_DST:-$DST}
-        local service_TGT="${service}_TGT"
-        _TGT=${!service_TGT:-$TGT}
+        get_service_config
 
         ssh ${_HST} 'bash -s' <<EOF
                 cd ${_DST}
@@ -251,8 +230,9 @@ service_status() {
 EOF
 }
 
-export service=
+prog=$0
 
+service=
 known_services=(linky wattflux tarifs-cre)
 
 while [ $# -gt 0 ]
@@ -286,14 +266,15 @@ do
                         service_status
                         ;;
                 *)
-                        if [[ ! " ${known_services[*]} " =~ " ${1} " ]];
+                        if [[ " ${known_services[*]} " =~ " ${1} " ]];
                         then
                                 service=$1
                         else
-                                echo -e "\e[1;31mUnknown command or service: $1\e[0m" >&2
-                                echo "Usage: remote [command]" >&2
-                                echo "Available commands: ssh, compile, dist, clean" >&2
-                        exit 1
+                                echo -e "\e[1;31mUnknown service or command: $1\e[0m" >&2
+                                echo "Usage: ${prog} [service] [command]" >&2
+                                echo "Available services: ${known_services[*]}"
+                                echo "Available commands: ssh compile dist clean" >&2
+                                exit 1
                         fi
                         ;;
         esac
