@@ -1,5 +1,6 @@
 /target
 */dist/
+.vscode/settings.json
 notes.txt
 *.env
 */*.yml

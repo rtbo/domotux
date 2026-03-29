@@ -68,9 +68,7 @@ impl Db {
         let conn = self.db.connect()?;
 
         // Check if the user already exists
-        let mut stmt = conn
-            .prepare("SELECT 1 FROM users WHERE username = ?")
-            .await?;
+        let mut stmt = conn.prepare("SELECT 1 FROM users WHERE name = ?").await?;
         let mut rows = stmt.query((username,)).await?;
         if rows.next().await?.is_some() {
             anyhow::bail!("User {} already exists", username);
@@ -79,11 +77,20 @@ impl Db {
         // Create the user
         let salt = generate_salt();
         let pwd_hash = hash_password(password, &salt);
-        conn.query(
-            "INSERT INTO users (name, pwd, salt) VALUES (?, ?, ?)",
-            (username, pwd_hash.as_slice(), salt.as_slice()),
-        )
-        .await?;
+        println!(
+            "Creating user '{}' with password hash {:?} and salt {:?}",
+            username, pwd_hash, salt
+        );
+        let num = conn
+            .execute(
+                "INSERT INTO users (name, pwd, salt) VALUES (?, ?, ?)",
+                (username, pwd_hash.as_slice(), salt.as_slice()),
+            )
+            .await?;
+
+        if num != 1 {
+            anyhow::bail!("Failed to create user {}", username);
+        }
 
         Ok(())
     }
@@ -100,12 +107,17 @@ impl Db {
             let stored_pwd = row.get_value(0)?;
             let salt = row.get_value(1)?;
 
-            let stored_pwd = stored_pwd.as_blob().ok_or_else(|| {
-                anyhow::anyhow!("Invalid password hash for user {}", username)
-            })?;
-            let salt = salt.as_blob().ok_or_else(|| {
-                anyhow::anyhow!("Invalid salt for user {}", username)
-            })?;
+            let stored_pwd = stored_pwd
+                .as_blob()
+                .ok_or_else(|| anyhow::anyhow!("Invalid password hash for user {}", username))?;
+            let salt = salt
+                .as_blob()
+                .ok_or_else(|| anyhow::anyhow!("Invalid salt for user {}", username))?;
+
+            println!(
+                "Authenticating user '{}' with password hash {:?} and salt {:?}",
+                username, stored_pwd, salt
+            );
 
             let input_pwd_hash = hash_password(password, salt);
             Ok(stored_pwd == input_pwd_hash.as_slice())

@@ -13,6 +13,7 @@ mod service;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Config {
     db_path: PathBuf,
+    bind_addr: String,
     secret_key: Option<String>,
 }
 
@@ -21,22 +22,16 @@ impl Default for Config {
         let db_path = default_db_path().expect("Could not determine config directory");
         Self {
             db_path,
+            bind_addr: "0.0.0.0:3030".to_string(),
             secret_key: None,
         }
     }
 }
 
-fn default_config_dir() -> Option<PathBuf> {
-    let config_path = dirs::config_local_dir()
-        .map(|dir| dir.join("domotux"))
-        .or_else(|| dirs::config_dir().map(|dir| dir.join("domotux")))
-        .or_else(|| dirs::home_dir())?;
-    Some(config_path)
-}
-
 fn default_db_path() -> Option<PathBuf> {
-    let cd = default_config_dir()?;
-    Some(cd.join("domotux.db"))
+    let data_dir = dirs::data_dir()
+        .map(|dir| dir.join("domotux"))?;
+    Some(data_dir.join("domotux.db"))
 }
 
 #[derive(Parser)]
@@ -167,8 +162,8 @@ fn validate_username(username: &str) -> anyhow::Result<()> {
 }
 
 fn validate_password(password: &str) -> anyhow::Result<()> {
-    if password.len() < 6 {
-        anyhow::bail!("Password must be at least 6 characters long");
+    if password.len() < 3 {
+        anyhow::bail!("Password must be at least 3 characters long");
     }
     Ok(())
 }
