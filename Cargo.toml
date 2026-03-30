@@ -1,12 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["base", "domotux", "linky", "tarifs-cre", "wattflux"]
+members = ["base", "domotux", "linky", "tarifs-cre", "tools/mig_influx", "wattflux"]
 
 [workspace.dependencies]
 base = { path = "base" }
 
 anyhow = "1.0.102"
 axum = { version = "0.8.8", features = ["macros"] }
+chrono = "0.4.44"
 clap = { version = "4.6.0", features = ["derive"] }
 dirs = "6.0.0"
 env_logger = "0.11.9"

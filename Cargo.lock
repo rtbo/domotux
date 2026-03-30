@@ -1941,6 +1941,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mig_influx"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_yml",
+ "tokio",
+]
+
+[[package]]
 name = "mimalloc"
 version = "0.1.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
