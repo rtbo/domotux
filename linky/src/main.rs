@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::process;
 
+use base::mqtt;
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use tokio::sync;
@@ -50,8 +51,14 @@ async fn main() -> process::ExitCode {
     }
 }
 
+async fn tests() {
+    let papp = mqtt::topics::AppPower(830.0);
+    let payload = serde_json::to_string(&papp).unwrap();
+    println!("Serialized AppPower: {}", payload);
+}
 
 async fn run(cli: Cli) -> Result<(), anyhow::Error> {
+    tests().await;
     if cli.default_config {
         return base::cfg::print_default_config::<Config>();
     }

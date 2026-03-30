@@ -1,52 +1,49 @@
-use std::{path::PathBuf, process, sync::Arc, time::Duration};
+use std::{path::PathBuf, process, time::Duration};
 
-use axum::Json;
-use axum::Router;
-use axum::extract::{Query, State};
-use axum::http::StatusCode;
-use axum::routing::get;
-use chrono::{FixedOffset, NaiveDateTime, TimeZone};
+use base::mqtt::topics::Contract;
+use base::mqtt::topics::KwhPrice;
+use base::mqtt::topics::Topic;
 use clap::Parser;
+use rumqttc::v5::Event;
+use rumqttc::v5::mqttbytes::QoS;
+use rumqttc::v5::mqttbytes::v5::Packet;
+use rumqttc::v5::mqttbytes::v5::PublishProperties;
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
+use tokio::sync;
 use tokio::task;
 
-mod contract;
 mod cre;
 mod tabular;
 
-use crate::contract::Contract;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CreDbConfig {
-    #[serde(serialize_with = "base::cfg::serialize_seconds", deserialize_with = "base::cfg::deserialize_seconds")]
+    #[serde(
+        serialize_with = "base::cfg::serialize_seconds",
+        deserialize_with = "base::cfg::deserialize_seconds"
+    )]
     validity: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ServerConfig {
-    bind_address: String,
+enum ContractConfig {
+    Mqtt,
+    Static(Contract),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Config {
-    contract: contract::Config,
+    broker: base::mqtt::BrokerAddress,
+    contract: ContractConfig,
     cre_db: CreDbConfig,
-    server: ServerConfig,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            contract: contract::Config::Mqtt {
-                broker: Default::default(),
-                topic: "domotux/contract/#".to_string(),
-            },
+            broker: "localhost".parse().unwrap(),
+            contract: ContractConfig::Mqtt,
             cre_db: CreDbConfig {
                 validity: Duration::from_secs(24 * 3600), // 24h
-            },
-            server: ServerConfig {
-                bind_address: "0.0.0.0:8080".to_string(),
             },
         }
     }
@@ -76,87 +73,6 @@ async fn main() -> process::ExitCode {
     }
 }
 
-#[derive(Debug, Clone)]
-struct AppState {
-    contract: Contract,
-    db: cre::Db,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct TarifQuery {
-    date: Option<String>,
-    psousc: Option<u32>,
-    option: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "option", rename_all = "lowercase")]
-pub enum OptionPrice {
-    Base {
-        base: f32,
-    },
-    Hphc {
-        hp: f32,
-        hc: f32,
-    },
-    Tempo {
-        #[serde(rename = "hpBleu")]
-        hp_bleu: f32,
-        #[serde(rename = "hcBleu")]
-        hc_bleu: f32,
-        #[serde(rename = "hpBlanc")]
-        hp_blanc: f32,
-        #[serde(rename = "hcBlanc")]
-        hc_blanc: f32,
-        #[serde(rename = "hpRouge")]
-        hp_rouge: f32,
-        #[serde(rename = "hcRouge")]
-        hc_rouge: f32,
-    },
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub struct TarifResponse {
-    date: String,
-    psousc: u32,
-    #[serde(rename = "prixKwh")]
-    prix_kwh: OptionPrice,
-}
-
-#[axum::debug_handler]
-async fn get_tarif(
-    State(state): State<Arc<Mutex<AppState>>>,
-    Query(query): Query<TarifQuery>,
-) -> Result<Json<TarifResponse>, StatusCode> {
-    let state = state.lock().await;
-
-    let paris_tz: FixedOffset = FixedOffset::east_opt(1 * 3600).unwrap();
-    let date = query
-        .date
-        .and_then(|d| {
-            NaiveDateTime::parse_from_str(&d, "%Y-%m-%d")
-                .map(|ndt| paris_tz.from_local_datetime(&ndt).unwrap())
-                .ok()
-        })
-        .unwrap_or_else(|| chrono::Utc::now().with_timezone(&paris_tz));
-    let psousc = query.psousc.unwrap_or(state.contract.psousc);
-    let option = query
-        .option
-        .unwrap_or_else(|| state.contract.optarif.clone());
-
-    let resp_opt = state.db.search(&option, psousc, date).map_err(|e| {
-        log::error!("Error searching for tariff: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    let resp = TarifResponse {
-        date: date.format("%Y-%m-%d").to_string(),
-        psousc,
-        prix_kwh: resp_opt.ok_or(StatusCode::NOT_FOUND)?,
-    };
-    Ok(Json(resp))
-}
-
 async fn run(cli: Cli) -> Result<(), anyhow::Error> {
     if cli.default_config {
         return base::cfg::print_default_config::<Config>();
@@ -165,49 +81,142 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
     let config: Config = base::cfg::load_config("tarifs-cre", cli.config_file).await?;
     log::info!("Starting with config: {:#?}", config);
 
-    let contract = config.contract.static_or_default();
-    let db = cre::Db::load().await?;
-
-    let state = Arc::new(Mutex::new(AppState { contract, db }));
-
-    // Contract update loop via MQTT
-    if matches!(config.contract, contract::Config::Mqtt { .. }) {
-        log::info!("Subscribing to MQTT for contract updates");
-        let state = state.clone();
-        let config = config.contract.clone();
-        task::spawn(async move {
-            if let Err(e) = config.subscribe_to_changes(state).await {
-                log::error!("Error subscribing to MQTT: {}", e);
-            }
-        });
-    }
-
-    // CRE DB update loop
-    task::spawn({
-        let state = state.clone();
-        let config = config.cre_db.clone();
-        async move {
-            loop {
-                tokio::time::sleep(config.validity).await;
-                let db = match cre::Db::load().await {
-                    Ok(db) => db,
-                    Err(e) => {
-                        log::error!("Error loading CRE DB: {}", e);
-                        continue;
-                    }
-                };
-                state.lock().await.db = db;
+    let initial_contract = match &config.contract {
+        ContractConfig::Mqtt => {
+            log::debug!(
+                "Initializing to default 9kVA tempo contract. Will be updated if MQTT messages are received."
+            );
+            Contract {
+                subsc_power: Some(9),
+                option: Some("tempo".to_string()),
             }
         }
-    });
+        ContractConfig::Static(contract) => contract.clone(),
+    };
 
-    // build our application with a single route
-    let app = Router::new()
-        .route("/tarif", get(get_tarif))
-        .with_state(state);
+    let (tx, mut rx) = sync::watch::channel(initial_contract);
 
-    // run our app with hyper, listening globally on port 3000
-    let listener = tokio::net::TcpListener::bind(&config.server.bind_address).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let (client, mut ev_loop) = {
+        let options = base::mqtt::make_options("tarifs-cre", config.broker.clone());
+        rumqttc::v5::AsyncClient::new(options, 10)
+    };
+
+    // Contract update loop via MQTT
+    let mut contract = match &config.contract {
+        ContractConfig::Mqtt => {
+            log::info!("Subscribing to MQTT for contract updates");
+            let contract_topic = Contract::topic();
+            client
+                .subscribe(contract_topic.clone(), QoS::AtMostOnce)
+                .await?;
+            task::spawn(async move {
+                if let Err(e) = contract_poll_loop(ev_loop, tx).await {
+                    log::error!("Error polling MQTT: {}", e);
+                }
+            });
+            rx.changed().await?;
+            rx.borrow_and_update().clone()
+        }
+        ContractConfig::Static(contract) => {
+            task::spawn(async move {
+                loop {
+                    match ev_loop.poll().await {
+                        Err(e) => {
+                            log::error!("MQTT event loop error: {}", e);
+                            break;
+                        }
+                        Ok(_) => {}
+                    }
+                }
+            });
+            contract.clone()
+        }
+    };
+
+    let validity = config.cre_db.validity;
+
+    loop {
+        fetch_and_publish_kwh_price(&client, &contract, 2 * validity).await?;
+        let last_pub = tokio::time::Instant::now();
+
+        let changed = rx.changed();
+        let elapsed = last_pub.elapsed();
+        let validity_fut = tokio::time::sleep(validity - elapsed);
+        tokio::select! {
+            _ = changed => {
+                contract = rx.borrow().clone();
+                log::info!("Contract updated: {:#?}", contract);
+            }
+            _ = validity_fut => {}
+        }
+    }
+}
+
+async fn contract_poll_loop(
+    mut ev_loop: rumqttc::v5::EventLoop,
+    tx: sync::watch::Sender<Contract>,
+) -> anyhow::Result<()> {
+    let contract_topic = Contract::topic();
+    loop {
+        match ev_loop.poll().await {
+            Ok(Event::Incoming(Packet::Publish(publish))) => {
+                let topic = String::from_utf8_lossy(&publish.topic);
+                log::info!("Received MQTT message on topic '{}'", topic);
+                if topic == contract_topic {
+                    log::info!("Received full contract update via MQTT");
+                    if let Ok(contract) = serde_json::from_slice::<Contract>(&publish.payload) {
+                        if let Err(e) = tx.send(contract.clone()) {
+                            log::error!("Failed to send contract update: {}", e);
+                            break;
+                        } else {
+                            log::info!("Updated contract to: {:#?}", contract);
+                        }
+                    } else {
+                        log::warn!("Failed to parse contract from MQTT payload");
+                    }
+                }
+            }
+            Ok(_) => {}
+            Err(e) => {
+                log::error!("MQTT event loop error: {}", e);
+                break;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn fetch_and_publish_kwh_price(
+    client: &rumqttc::v5::AsyncClient,
+    contract: &Contract,
+    validity: Duration,
+) -> anyhow::Result<()> {
+    match cre::fetch_kwh_price(contract, None).await? {
+        Some(kwh_price) => {
+            log::info!("Fetched kWh price: {:#?}", kwh_price);
+            publish_kwh_price(client, kwh_price, validity).await?;
+        }
+        None => {
+            log::warn!("Failed to fetch kWh price for contract {:#?}", contract);
+        }
+    }
+    Ok(())
+}
+
+async fn publish_kwh_price(
+    client: &rumqttc::v5::AsyncClient,
+    msg: KwhPrice,
+    validity: Duration,
+) -> anyhow::Result<()> {
+    let topic = KwhPrice::topic();
+    let payload = serde_json::to_vec(&msg)?;
+    let props = PublishProperties {
+        message_expiry_interval: Some(validity.as_secs() as u32),
+        ..Default::default()
+    };
+    client
+        .publish_with_properties(topic, QoS::AtMostOnce, false, payload, props)
+        .await?;
     Ok(())
 }

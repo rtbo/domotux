@@ -14,8 +14,6 @@ pub struct Config {
     device_path: String,
     /// Mode to calculate checksum (1 or 2)
     checksum_mode: u32,
-    /// Fields to be ignored
-    ignore: Vec<String>,
 }
 
 impl Default for Config {
@@ -23,12 +21,6 @@ impl Default for Config {
         Self {
             device_path: "/dev/ttyAMA0".to_string(),
             checksum_mode: 1,
-            ignore: vec![
-                "MOTDETAT".to_string(),
-                // Couleur du lendemain.
-                // Arrive à 20H sur le TIC, on peut l'avoir dès 11H avec service web.
-                "DEMAIN".to_string(),
-            ],
         }
     }
 }
@@ -49,6 +41,23 @@ impl Value {
             Value::Float(f)
         } else {
             Value::String(s.to_string())
+        }
+    }
+
+    pub fn as_u32(&self) -> Option<u32> {
+        match self {
+            Value::Integer(i) if *i >= 0 => Some(*i as u32),
+            Value::Float(f) if *f >= 0.0 => Some(*f as u32),
+            Value::String(_) => None,
+            _ => None,
+        }
+    }
+
+    pub fn as_f32(&self) -> Option<f32> {
+        match self {
+            Value::Integer(i) => Some(*i as f32),
+            Value::Float(f) => Some(*f),
+            Value::String(_) => None,
         }
     }
 }
@@ -98,6 +107,15 @@ pub async fn read_loop(
 
     let mut buf = Vec::new();
     let mut last_len = 16;
+
+    let ignored_fields = vec![
+        "ADCO".to_string(),
+        "MOTDETAT".to_string(),
+        "IMAX".to_string(),
+        // Couleur du lendemain.
+        // Arrive à 20H sur le TIC, on peut l'avoir dès 11H avec service web.
+        "DEMAIN".to_string(),
+    ];
 
     'frame: loop {
         log::debug!("Waiting for start of frame...");
@@ -155,7 +173,7 @@ pub async fn read_loop(
                 continue 'frame;
             };
 
-            if cfg.ignore.iter().any(|f| f == label) {
+            if ignored_fields.iter().any(|f| f == label) {
                 continue 'field;
             }
 

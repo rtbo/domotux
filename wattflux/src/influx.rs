@@ -36,14 +36,14 @@ impl Client {
         }
     }
 
-    pub async fn write_power_line(&self, power: i32) -> anyhow::Result<()>
+    pub async fn write_power_line(&self, power: mqtt::topics::AppPower) -> anyhow::Result<()>
     {
-        let line = format!("{} value={}", self.cfg.power, power);
+        let line = format!("{} value={}", self.cfg.power, power.0);
         self.write_line(line).await?;
         Ok(())
     }
 
-    pub async fn write_meters_line(&self, meters: mqtt::MetersPayload) -> anyhow::Result<()>
+    pub async fn write_meters_line(&self, meters: mqtt::topics::Meters) -> anyhow::Result<()>
     {
         let mut line = String::new();
         if let Some(active) = &meters.active {

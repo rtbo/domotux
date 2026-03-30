@@ -7,12 +7,12 @@ edition = "2024"
 base.workspace = true
 
 anyhow.workspace = true
-axum.workspace = true
 clap.workspace = true
 env_logger.workspace = true
 log.workspace = true
 reqwest.workspace = true
 rumqttc.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 chrono = "0.4.44"

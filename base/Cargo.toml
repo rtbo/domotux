@@ -12,3 +12,6 @@ rumqttc.workspace = true
 serde.workspace = true
 serde_yml.workspace = true
 tokio.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -1,8 +1,8 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use tokio::{sync, task};
 use std::{fmt, str::FromStr};
+use tokio::{sync, task};
 
-use crate::vecmap::VecMap;
+pub mod topics;
 
 /// Make MQTT options from a base client ID and a broker address
 pub fn make_options(dev_base: &str, broker: BrokerAddress) -> rumqttc::v5::MqttOptions {
@@ -87,7 +87,10 @@ impl<'de> Deserialize<'de> for BrokerAddress {
     }
 }
 
-pub fn spawn_event_loop(mut event_loop: rumqttc::v5::EventLoop, tx: sync::mpsc::Sender<rumqttc::v5::Event>) -> task::JoinHandle<()> {
+pub fn spawn_event_loop(
+    mut event_loop: rumqttc::v5::EventLoop,
+    tx: sync::mpsc::Sender<rumqttc::v5::Event>,
+) -> task::JoinHandle<()> {
     task::spawn(async move {
         loop {
             match event_loop.poll().await {
@@ -105,10 +108,4 @@ pub fn spawn_event_loop(mut event_loop: rumqttc::v5::EventLoop, tx: sync::mpsc::
             }
         }
     })
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MetersPayload {
-    pub active: Option<String>,
-    pub meters: VecMap<u32>,
 }
