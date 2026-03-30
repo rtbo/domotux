@@ -6,8 +6,6 @@ pub struct Config {
     host: String,
     token: Option<String>,
     database: String,
-    power: String,
-    meters: String,
 }
 
 impl Default for Config {
@@ -16,8 +14,6 @@ impl Default for Config {
             host: "http://localhost:8181".to_string(),
             token: None,
             database: "domotux".to_string(),
-            power: "papp".to_string(),
-            meters: "compteurs".to_string(),
         }
     }
 }
@@ -36,32 +32,32 @@ impl Client {
         }
     }
 
-    pub async fn write_power_line(&self, power: mqtt::topics::AppPower) -> anyhow::Result<()>
-    {
-        let line = format!("{} value={}", self.cfg.power, power.0);
+    pub async fn write_papp_line(&self, papp: mqtt::topics::PApp) -> anyhow::Result<()> {
+        let line = format!("papp value={}", papp.0);
         self.write_line(line).await?;
         Ok(())
     }
 
-    pub async fn write_meters_line(&self, meters: mqtt::topics::Meters) -> anyhow::Result<()>
-    {
+    pub async fn write_compteurs_line(
+        &self,
+        compteurs: mqtt::topics::Compteurs,
+    ) -> anyhow::Result<()> {
         let mut line = String::new();
-        if let Some(active) = &meters.active {
+        if let Some(active) = &compteurs.active {
             line.push_str(&format!("active=\"{}\"", active));
-
         }
-        for (key, value) in meters.meters.iter() {
-             if !line.is_empty() {
+        for (key, value) in compteurs.compteurs.iter() {
+            if !line.is_empty() {
                 line.push(',');
             }
-             line.push_str(&format!("{}={}", key, value));
+            line.push_str(&format!("{}={}u", key, value));
         }
         if line.is_empty() {
             anyhow::bail!("No meter data to write");
         }
 
-         let line = format!("{} {}", self.cfg.meters, line);
-         self.write_line(line).await?;
+        let line = format!("compteurs {}", line);
+        self.write_line(line).await?;
         Ok(())
     }
 
@@ -77,10 +73,12 @@ impl Client {
             req = req.bearer_auth(token);
         }
 
-        let res = req.header("Content-Type", "text/plain; charset=utf-8")
+        let res = req
+            .header("Content-Type", "text/plain; charset=utf-8")
             .header("Accept", "application/json")
             .body(line)
-            .send().await?;
+            .send()
+            .await?;
 
         if !res.status().is_success() {
             let status = res.status();

@@ -1,7 +1,7 @@
 use std::{path::PathBuf, process, time::Duration};
 
-use base::mqtt::topics::Contract;
-use base::mqtt::topics::KwhPrice;
+use base::mqtt::topics::Contrat;
+use base::mqtt::topics::PrixKwh;
 use base::mqtt::topics::Topic;
 use clap::Parser;
 use rumqttc::v5::Event;
@@ -27,7 +27,7 @@ struct CreDbConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum ContractConfig {
     Mqtt,
-    Static(Contract),
+    Static(Contrat),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,7 +86,7 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
             log::debug!(
                 "Initializing to default 9kVA tempo contract. Will be updated if MQTT messages are received."
             );
-            Contract {
+            Contrat {
                 subsc_power: Some(9),
                 option: Some("tempo".to_string()),
             }
@@ -105,7 +105,7 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
     let mut contract = match &config.contract {
         ContractConfig::Mqtt => {
             log::info!("Subscribing to MQTT for contract updates");
-            let contract_topic = Contract::topic();
+            let contract_topic = Contrat::topic();
             client
                 .subscribe(contract_topic.clone(), QoS::AtMostOnce)
                 .await?;
@@ -154,9 +154,9 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
 
 async fn contract_poll_loop(
     mut ev_loop: rumqttc::v5::EventLoop,
-    tx: sync::watch::Sender<Contract>,
+    tx: sync::watch::Sender<Contrat>,
 ) -> anyhow::Result<()> {
-    let contract_topic = Contract::topic();
+    let contract_topic = Contrat::topic();
     loop {
         match ev_loop.poll().await {
             Ok(Event::Incoming(Packet::Publish(publish))) => {
@@ -164,7 +164,7 @@ async fn contract_poll_loop(
                 log::info!("Received MQTT message on topic '{}'", topic);
                 if topic == contract_topic {
                     log::info!("Received full contract update via MQTT");
-                    if let Ok(contract) = serde_json::from_slice::<Contract>(&publish.payload) {
+                    if let Ok(contract) = serde_json::from_slice::<Contrat>(&publish.payload) {
                         if let Err(e) = tx.send(contract.clone()) {
                             log::error!("Failed to send contract update: {}", e);
                             break;
@@ -189,7 +189,7 @@ async fn contract_poll_loop(
 
 async fn fetch_and_publish_kwh_price(
     client: &rumqttc::v5::AsyncClient,
-    contract: &Contract,
+    contract: &Contrat,
     validity: Duration,
 ) -> anyhow::Result<()> {
     match cre::fetch_kwh_price(contract, None).await? {
@@ -206,10 +206,10 @@ async fn fetch_and_publish_kwh_price(
 
 async fn publish_kwh_price(
     client: &rumqttc::v5::AsyncClient,
-    msg: KwhPrice,
+    msg: PrixKwh,
     validity: Duration,
 ) -> anyhow::Result<()> {
-    let topic = KwhPrice::topic();
+    let topic = PrixKwh::topic();
     let payload = serde_json::to_vec(&msg)?;
     let props = PublishProperties {
         message_expiry_interval: Some(validity.as_secs() as u32),

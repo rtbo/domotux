@@ -2,7 +2,7 @@
 //! See https://www.data.gouv.fr/datasets/historique-des-tarifs-reglementes-de-vente-delectricite-pour-les-consommateurs-residentiels
 
 use base::{
-    mqtt::topics::{Contract, KwhPrice},
+    mqtt::topics::{Contrat, PrixKwh},
     vecmap::VecMap,
 };
 use chrono::NaiveDate;
@@ -15,9 +15,9 @@ const HPHC_ID: &str = "f7303b3a-93c7-4242-813d-84919034c416";
 const TEMPO_ID: &str = "0c3d1d36-c412-4620-8566-e5cbb4fa2b5a";
 
 pub async fn fetch_kwh_price(
-    contract: &Contract,
+    contract: &Contrat,
     date: Option<NaiveDate>,
-) -> anyhow::Result<Option<KwhPrice>> {
+) -> anyhow::Result<Option<PrixKwh>> {
     let date = date.unwrap_or_else(|| chrono::Local::now().date_naive());
     match contract.option.as_deref() {
         Some("base") => fetch_kwh_price_for::<BaseRow>(BASE_ID, contract.subsc_power, date).await,
@@ -33,7 +33,7 @@ async fn fetch_kwh_price_for<R>(
     id: &str,
     subsc_power: Option<u32>,
     date: NaiveDate,
-) -> anyhow::Result<Option<KwhPrice>>
+) -> anyhow::Result<Option<PrixKwh>>
 where
     R: Row + DeserializeOwned,
 {
@@ -47,7 +47,7 @@ where
         let ds = row.date_start().unwrap_or(NaiveDate::MIN);
         let de = row.date_end().unwrap_or(NaiveDate::MAX);
         if ds <= date && de > date {
-            return Ok(Some(KwhPrice(row.to_vecmap())));
+            return Ok(Some(PrixKwh(row.to_vecmap())));
         }
     }
     Ok(None)

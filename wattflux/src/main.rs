@@ -70,8 +70,8 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
             };
             log::debug!("Received MQTT message {msg:#?}");
             let res = match msg {
-                subscribe::Msg::Power(power) => influx.write_power_line(power).await,
-                subscribe::Msg::Meters(meters) => influx.write_meters_line(meters).await,
+                subscribe::Msg::PApp(power) => influx.write_papp_line(power).await,
+                subscribe::Msg::Compteurs(meters) => influx.write_compteurs_line(meters).await,
             };
             if let Err(e) = res {
                 log::error!("Failed to publish to InfluxDB: {}", e);

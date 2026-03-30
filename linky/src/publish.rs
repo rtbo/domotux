@@ -12,12 +12,12 @@ use crate::tic;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     broker: base::mqtt::BrokerAddress,
-    meters: MetersConfig,
-    contract: ContractConfig,
+    compteurs: CompteursConfig,
+    contrat: ContratConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct MetersConfig {
+struct CompteursConfig {
     #[serde(
         serialize_with = "base::cfg::serialize_seconds",
         deserialize_with = "base::cfg::deserialize_seconds"
@@ -26,7 +26,7 @@ struct MetersConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ContractConfig {
+struct ContratConfig {
     #[serde(
         serialize_with = "base::cfg::serialize_seconds",
         deserialize_with = "base::cfg::deserialize_seconds"
@@ -38,10 +38,10 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             broker: "domotux.lan".parse().unwrap(),
-            meters: MetersConfig {
+            compteurs: CompteursConfig {
                 min_interval: Duration::from_secs(60),
             },
-            contract: ContractConfig {
+            contrat: ContratConfig {
                 min_interval: Duration::from_hours(24),
             },
         }
@@ -107,7 +107,7 @@ impl Client {
 
         let publish_contract = self
             .last_contract_pub
-            .map(|last_pub| now.duration_since(last_pub) >= self.config.contract.min_interval)
+            .map(|last_pub| now.duration_since(last_pub) >= self.config.contrat.min_interval)
             .unwrap_or(true);
         if !publish_contract {
             log::debug!("Skipping contract publish because min_interval not reached");
@@ -115,7 +115,7 @@ impl Client {
 
         let publish_meters = self
             .last_meters_pub
-            .map(|last_pub| now.duration_since(last_pub) >= self.config.meters.min_interval)
+            .map(|last_pub| now.duration_since(last_pub) >= self.config.compteurs.min_interval)
             .unwrap_or(true);
         if !publish_meters {
             log::debug!("Skipping meters publish because min_interval not reached");
@@ -165,9 +165,9 @@ impl Client {
     }
 
     async fn publish_power(&self, value: &tic::Value) -> anyhow::Result<()> {
-        let topic = mqtt::topics::AppPower::topic();
+        let topic = mqtt::topics::PApp::topic();
         log::debug!("Publishing power to MQTT: {} = {}", topic, value);
-        let msg = mqtt::topics::AppPower(
+        let msg = mqtt::topics::PApp(
             value
                 .as_f32()
                 .ok_or_else(|| anyhow::anyhow!("Power value is not a number, got {:?}", value))?,
@@ -222,12 +222,12 @@ impl Client {
             return Ok(false);
         };
 
-        let contract = mqtt::topics::Contract {
+        let contract = mqtt::topics::Contrat {
             subsc_power: Some(isousc * 200 / 1000),
             option: Some(option.to_string()),
         };
 
-        let topic = mqtt::topics::Contract::topic();
+        let topic = mqtt::topics::Contrat::topic();
         let payload = serde_json::to_vec(&contract)?;
 
         log::debug!(
@@ -238,7 +238,7 @@ impl Client {
 
         let properties = PublishProperties {
             content_type: Some("text/plain".to_string()),
-            message_expiry_interval: Some(self.config.contract.min_interval.as_secs() as u32 * 2),
+            message_expiry_interval: Some(self.config.contrat.min_interval.as_secs() as u32 * 2),
             ..Default::default()
         };
 
@@ -300,12 +300,12 @@ impl Client {
 
         let properties = PublishProperties {
             content_type: Some("text/plain".to_string()),
-            message_expiry_interval: Some(self.config.meters.min_interval.as_secs() as u32 * 2),
+            message_expiry_interval: Some(self.config.compteurs.min_interval.as_secs() as u32 * 2),
             ..Default::default()
         };
 
-        let msg = mqtt::topics::Meters { active, meters };
-        let topic = mqtt::topics::Meters::topic();
+        let msg = mqtt::topics::Compteurs { active, compteurs: meters };
+        let topic = mqtt::topics::Compteurs::topic();
         log::debug!("Publishing meters to MQTT: {} = {:?}", topic, msg);
 
         let payload = serde_json::to_vec(&msg)?;

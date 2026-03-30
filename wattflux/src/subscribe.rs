@@ -20,15 +20,15 @@ impl Default for Config {
 
 #[derive(Debug, Clone)]
 pub enum Msg {
-    Power(mqtt::topics::AppPower),
-    Meters(mqtt::topics::Meters),
+    PApp(mqtt::topics::PApp),
+    Compteurs(mqtt::topics::Compteurs),
 }
 
 #[derive(Debug, Clone)]
 pub struct Client {
     client: rumqttc::v5::AsyncClient,
-    power_topic: String,
-    meters_topic: String,
+    papp_topic: String,
+    compteurs_topic: String,
 }
 
 impl Client {
@@ -37,17 +37,17 @@ impl Client {
         log::debug!("MQTT options: {:#?}", options);
 
         let (client, event_loop) = rumqttc::v5::AsyncClient::new(options, 10);
-        let power_topic = mqtt::topics::AppPower::topic();
-        let meters_topic = mqtt::topics::Meters::topic();
-        (Self { client, power_topic, meters_topic }, event_loop)
+        let papp_topic = mqtt::topics::PApp::topic();
+        let compteurs_topic = mqtt::topics::Compteurs::topic();
+        (Self { client, papp_topic, compteurs_topic }, event_loop)
     }
 
     pub async fn subscribe(&mut self) -> anyhow::Result<()> {
         self.client
-            .subscribe(&self.power_topic, QoS::AtMostOnce)
+            .subscribe(&self.papp_topic, QoS::AtMostOnce)
             .await?;
         self.client
-            .subscribe(&self.meters_topic, QoS::AtLeastOnce)
+            .subscribe(&self.compteurs_topic, QoS::AtLeastOnce)
             .await?;
         Ok(())
     }
@@ -58,12 +58,12 @@ impl Client {
                 let topic = std::str::from_utf8(&msg.topic)?;
                 let payload = std::str::from_utf8(&msg.payload)?;
 
-                if topic == self.power_topic {
-                    let power = payload.trim().parse::<f32>().map(mqtt::topics::AppPower)?;
-                    Ok(Some(Msg::Power(power)))
-                } else if topic == self.meters_topic {
-                    let meters_payload = serde_json::from_str(payload)?;
-                    Ok(Some(Msg::Meters(meters_payload)))
+                if topic == self.papp_topic {
+                    let papp = payload.trim().parse::<f32>().map(mqtt::topics::PApp)?;
+                    Ok(Some(Msg::PApp(papp)))
+                } else if topic == self.compteurs_topic {
+                    let compteurs = serde_json::from_str(payload)?;
+                    Ok(Some(Msg::Compteurs(compteurs)))
                 } else {
                     log::warn!("Received message on unknown topic: {}", topic);
                     Ok(None)

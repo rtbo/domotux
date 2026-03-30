@@ -9,11 +9,11 @@ pub trait Topic {
 /// Apparent power of the installation, as seen by the meter. Should be <= subscribed power.
 /// A negative value means that the installation produces power (ex: solar panels).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppPower(pub f32);
+pub struct PApp(pub f32);
 
-impl Topic for AppPower {
+impl Topic for PApp {
     fn topic() -> String {
-        "domotux/app_power".to_string()
+        "domotux/papp".to_string()
     }
 }
 
@@ -22,39 +22,40 @@ impl Topic for AppPower {
 /// For example, with the french "Tempo" option, the available meters are "bleuHp", "bleuHc", "blancHp", "blancHc", "rougeHp" and "rougeHc".
 /// The active one is the one corresponding to the current day type (ex: "bleu" for a blue day).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Meters {
+pub struct Compteurs {
     pub active: Option<String>,
-    pub meters: VecMap<u32>,
+    #[serde(flatten)]
+    pub compteurs: VecMap<u32>,
 }
 
-impl Topic for Meters {
+impl Topic for Compteurs {
     fn topic() -> String {
-        "domotux/meters".to_string()
+        "domotux/compteurs".to_string()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Contract {
+pub struct Contrat {
     /// Subscribed power in KVA
     pub subsc_power: Option<u32>,
     /// Type of contract (in France: "base", "tempo", "hphc")
     pub option: Option<String>,
 }
 
-impl Topic for Contract {
+impl Topic for Contrat {
     fn topic() -> String {
-        "domotux/contract".to_string()
+        "domotux/contrat".to_string()
     }
 }
 
 
 /// The price per kWh for the a selected option.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KwhPrice(pub VecMap<f32>);
+pub struct PrixKwh(pub VecMap<f32>);
 
-impl Topic for KwhPrice {
+impl Topic for PrixKwh {
     fn topic() -> String {
-        "domotux/kwh_price".to_string()
+        "domotux/prix_kwh".to_string()
     }
 }
 
@@ -64,27 +65,27 @@ mod tests {
 
     #[test]
     fn test_app_power_serialization() {
-        let papp = AppPower(830.0);
+        let papp = PApp(830.0);
         let payload = serde_json::to_string(&papp).unwrap();
         assert_eq!(payload, "830.0");
     }
 
     #[test]
-    fn test_meters_serialization() {
+    fn test_compteurs_serialization() {
         let mut meters = VecMap::new();
         meters.push_no_check("bleuHp".to_string(), 100);
         meters.push_no_check("bleuHc".to_string(), 200);
-        let m = Meters {
+        let m = Compteurs {
             active: Some("bleu".to_string()),
-            meters,
+            compteurs: meters,
         };
         let payload = serde_json::to_string(&m).unwrap();
         assert_eq!(payload, r#"{"active":"bleu","meters":{"bleuHp":100,"bleuHc":200}}"#);
     }
 
     #[test]
-    fn test_contract_serialization() {
-        let c = Contract {
+    fn test_contrat_serialization() {
+        let c = Contrat {
             subsc_power: Some(6),
             option: Some("tempo".to_string()),
         };
@@ -93,11 +94,11 @@ mod tests {
     }
 
     #[test]
-    fn test_kwh_price_serialization() {
+    fn test_prix_kwh_serialization() {
         let mut prices = VecMap::new();
         prices.push_no_check("bleuHc".to_string(), 0.15);
         prices.push_no_check("bleuHp".to_string(), 0.25);
-        let kwh_price = KwhPrice(prices);
+        let kwh_price = PrixKwh(prices);
         let payload = serde_json::to_string(&kwh_price).unwrap();
         assert_eq!(payload, r#"{"bleuHc":0.15,"bleuHp":0.25}"#);
     }
