@@ -4,7 +4,6 @@ use std::process;
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use tokio::sync;
-use tokio::time::{Duration, sleep};
 
 mod publish;
 mod tic;
@@ -13,15 +12,14 @@ mod tic;
 #[derive(Debug, Serialize, Deserialize)]
 struct Config {
     tic: tic::Config,
-    publish: publish::Config,
+    mqtt: publish::Config,
 }
-
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             tic: tic::Config::default(),
-            publish: publish::Config::default(),
+            mqtt: publish::Config::default(),
         }
     }
 }
@@ -58,32 +56,17 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
     let config: Config = base::cfg::load_config("linky", cli.config_file).await?;
     let Config {
         tic: tic_cfg,
-        publish: publish_cfg,
+        mqtt: publish_cfg,
     } = config;
 
-    let (mut mqtt_client, mut mqtt_evloop) = publish::Client::new(publish_cfg);
+    let mut mqtt_client = publish::Client::new(publish_cfg);
 
-    let (mpsc_tx, mut mpsc_rx) = sync::mpsc::channel(100);
-    let mut tic_handle = tokio::spawn(async move { tic::read_loop(tic_cfg, mpsc_tx).await });
-
-
-    let mut mqtt_handle = tokio::spawn(async move {
-        loop {
-            match mqtt_evloop.poll().await {
-                Ok(notification) => {
-                    log::debug!("MQTT event: {:?}", notification);
-                }
-                Err(e) => {
-                    log::warn!("MQTT poll error: {}", e);
-                    sleep(Duration::from_secs(1)).await;
-                }
-            }
-        }
-    });
+    let (tx, mut rx) = sync::mpsc::channel(100);
+    let mut tic_handle = tokio::spawn(async move { tic::read_loop(tic_cfg, tx).await });
 
     loop {
         tokio::select! {
-            Some(tic_frame) = mpsc_rx.recv() => {
+            Some(tic_frame) = rx.recv() => {
                 log::debug!("Received TIC update: {:?}", tic_frame);
                 if let Err(e) = mqtt_client.publish(tic_frame).await {
                     log::warn!("Failed to publish MQTT message: {}", e);
@@ -94,12 +77,6 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
                     Ok(Ok(())) => return Err(anyhow::anyhow!("TIC reader terminated unexpectedly")),
                     Ok(Err(e)) => return Err(anyhow::anyhow!("TIC reader error: {}", e)),
                     Err(e) => return Err(anyhow::anyhow!("Task panicked: {}", e)),
-                }
-            }
-            result = &mut mqtt_handle => {
-                match result {
-                    Ok(_) => return Err(anyhow::anyhow!("MQTT event loop terminated unexpectedly")),
-                    Err(e) => return Err(anyhow::anyhow!("MQTT task panicked: {}", e)),
                 }
             }
         }

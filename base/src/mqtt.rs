@@ -1,25 +1,14 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::{fmt, str::FromStr};
-use tokio::{sync, task};
 
+pub mod client;
 pub mod topics;
 
-/// Make MQTT options from a base client ID and a broker address
-pub fn make_options(dev_base: &str, broker: BrokerAddress) -> rumqttc::v5::MqttOptions {
-    let client_id = unique_dev_id(dev_base);
-    rumqttc::v5::MqttOptions::new(client_id, broker.host.clone(), broker.port)
+pub trait Topic {
+    fn topic() -> &'static str;
 }
 
-fn unique_dev_id(base: &str) -> String {
-    use rand::RngExt;
-
-    let random_suffix: String = rand::rng()
-        .sample_iter(&rand::distr::Alphanumeric)
-        .take(4)
-        .map(char::from)
-        .collect();
-    format!("{}-{}", base, random_suffix)
-}
+pub use client::Client;
 
 #[derive(Debug, Clone)]
 pub struct BrokerAddress {
@@ -87,25 +76,62 @@ impl<'de> Deserialize<'de> for BrokerAddress {
     }
 }
 
-pub fn spawn_event_loop(
-    mut event_loop: rumqttc::v5::EventLoop,
-    tx: sync::mpsc::Sender<rumqttc::v5::Event>,
-) -> task::JoinHandle<()> {
-    task::spawn(async move {
-        loop {
-            match event_loop.poll().await {
-                Ok(event) => {
-                    if let Err(e) = tx.send(event).await {
-                        log::error!("Failed to send MQTT event: {}", e);
-                        break; // Exit the loop if the receiver has been dropped
-                    }
-                }
-                Err(e) => {
-                    log::error!("MQTT event loop error: {}", e);
-                    // Sleep a bit before retrying to avoid busy loop on persistent errors
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                }
+pub trait SubscribeMsg {
+    /// The list of MQTT topics that this message type can be translated from.
+    /// The client will subscribe to these topics and attempt to translate incoming messages
+    /// into this type.
+    fn topics() -> Vec<&'static str>;
+
+    /// Translate an MQTT event (topic + payload) into a message of this type, if the topic matches
+    /// Returns Ok(None) if the topic isn't recognized, Ok(Some(msg)) if it is,
+    /// and Err(e) if there was an error parsing the payload
+    fn translate(topic: &str, payload: &[u8]) -> anyhow::Result<Option<Self>>
+    where
+        Self: Sized;
+}
+
+/// Implement SubscribeMsg for the unit type, which effectively means "no messages"
+/// Use this when you need a client for publishing only.
+impl SubscribeMsg for () {
+    fn topics() -> Vec<&'static str> {
+        vec![]
+    }
+
+    fn translate(_topic: &str, _payload: &[u8]) -> anyhow::Result<Option<Self>> {
+        Ok(None)
+    }
+}
+
+#[macro_export]
+macro_rules! mqtt_subscribe_msg {
+    (@topic [$ty:ty] <= $topic:expr) => {
+        $topic
+    };
+
+    (@topic [$ty:ty]) => {
+        <$ty as $crate::mqtt::Topic>::topic()
+    };
+
+    (enum $name:ident { $($variant:ident($ty:ty) $(<= $topic:expr)?),* $(,)? }) => {
+        #[derive(Debug, Clone)]
+        pub enum $name {
+            $($variant($ty)),*
+        }
+
+        impl $crate::mqtt::SubscribeMsg for $name {
+            fn topics() -> Vec<&'static str> {
+                vec![$($crate::mqtt_subscribe_msg!(@topic [$ty] $(<= $topic)?)),*]
+            }
+
+            fn translate(topic: &str, payload: &[u8]) -> anyhow::Result<Option<Self>> {
+                $(if topic == $crate::mqtt_subscribe_msg!(@topic [$ty] $(<= $topic)?) {
+                        let msg = serde_json::from_slice::<$ty>(payload)
+                            .map_err(|e| anyhow::anyhow!("Failed to parse MQTT message for topic '{}': {}", $crate::mqtt_subscribe_msg!(@topic [$ty] $(<= $topic)?), e))?;
+                        return Ok(Some(Self::$variant(msg)));
+                    })*
+
+                Ok(None)
             }
         }
-    })
+    };
 }

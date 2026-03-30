@@ -1,10 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
-use base::{
-    mqtt::{self, topics::Topic},
-    vecmap::VecMap,
-};
-use rumqttc::v5::mqttbytes::{QoS, v5::PublishProperties};
+use base::{mqtt::{self, topics::CompteurActif}, vecmap::VecMap};
+use rumqttc::v5::mqttbytes::QoS;
 use serde::{Deserialize, Serialize};
 
 use crate::tic;
@@ -48,9 +45,9 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Client {
-    client: rumqttc::v5::AsyncClient,
+    client: base::mqtt::Client<()>,
     config: Config,
     meters_map: HashMap<&'static str, &'static str>,
     ptec_map: HashMap<&'static str, &'static str>,
@@ -60,10 +57,8 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(config: Config) -> (Self, rumqttc::v5::EventLoop) {
-        let options = base::mqtt::make_options("linky", config.broker.clone());
-
-        let (client, event_loop) = rumqttc::v5::AsyncClient::new(options, 10);
+    pub fn new(config: Config) -> Self {
+        let client = base::mqtt::Client::new("linky", config.broker.clone());
 
         let ptec_map = HashMap::from([
             ("TH..", "th"),
@@ -88,18 +83,15 @@ impl Client {
             ("BBRHPJR", "rougeHp"),
         ]);
 
-        (
-            Self {
-                client,
-                config,
-                ptec_map,
-                meters_map,
-                last_meters_pub: None,
-                last_meter_len: None,
-                last_contract_pub: None,
-            },
-            event_loop,
-        )
+        Self {
+            client,
+            config,
+            ptec_map,
+            meters_map,
+            last_meters_pub: None,
+            last_meter_len: None,
+            last_contract_pub: None,
+        }
     }
 
     pub async fn publish(&mut self, tic_frame: Vec<(String, tic::Value)>) -> anyhow::Result<()> {
@@ -135,7 +127,7 @@ impl Client {
 
         let contract_fut = async {
             if publish_contract {
-                self.publish_contract(&tic_frame).await
+                self.publish_contrat(&tic_frame).await
             } else {
                 Ok(false)
             }
@@ -143,7 +135,7 @@ impl Client {
 
         let meters_fut = async {
             if publish_meters {
-                self.publish_meters(&tic_frame, self.last_meter_len).await
+                self.publish_compteurs(&tic_frame, self.last_meter_len).await
             } else {
                 Ok(None)
             }
@@ -165,28 +157,19 @@ impl Client {
     }
 
     async fn publish_power(&self, value: &tic::Value) -> anyhow::Result<()> {
-        let topic = mqtt::topics::PApp::topic();
-        log::debug!("Publishing power to MQTT: {} = {}", topic, value);
-        let msg = mqtt::topics::PApp(
+        let papp = mqtt::topics::PApp(
             value
                 .as_f32()
                 .ok_or_else(|| anyhow::anyhow!("Power value is not a number, got {:?}", value))?,
         );
-        let payload = serde_json::to_vec(&msg)?;
-
-        let properties = PublishProperties {
-            content_type: Some("text/plain".to_string()),
-            message_expiry_interval: Some(5),
-            ..Default::default()
-        };
 
         self.client
-            .publish_with_properties(topic, QoS::AtMostOnce, true, payload, properties)
+            .publish(&papp, QoS::AtMostOnce, true)
             .await?;
         Ok(())
     }
 
-    async fn publish_contract(&self, tic_frame: &[(String, tic::Value)]) -> anyhow::Result<bool> {
+    async fn publish_contrat(&self, tic_frame: &[(String, tic::Value)]) -> anyhow::Result<bool> {
         let isousc = tic_frame
             .iter()
             .find(|(field, _)| field == "ISOUSC")
@@ -222,39 +205,24 @@ impl Client {
             return Ok(false);
         };
 
-        let contract = mqtt::topics::Contrat {
+        let contrat = mqtt::topics::Contrat {
             subsc_power: Some(isousc * 200 / 1000),
             option: Some(option.to_string()),
         };
 
-        let topic = mqtt::topics::Contrat::topic();
-        let payload = serde_json::to_vec(&contract)?;
-
-        log::debug!(
-            "Publishing contract field to MQTT: {} = {:?}",
-            topic,
-            contract
-        );
-
-        let properties = PublishProperties {
-            content_type: Some("text/plain".to_string()),
-            message_expiry_interval: Some(self.config.contrat.min_interval.as_secs() as u32 * 2),
-            ..Default::default()
-        };
-
         self.client
-            .publish_with_properties(topic, QoS::AtLeastOnce, true, payload, properties)
+            .publish(&contrat, QoS::AtLeastOnce, true)
             .await?;
         Ok(true)
     }
 
-    async fn publish_meters(
+    async fn publish_compteurs(
         &self,
         tic_frame: &[(String, tic::Value)],
         last_meter_len: Option<usize>,
     ) -> anyhow::Result<Option<usize>> {
         let mut active = None;
-        let mut meters = if let Some(len) = last_meter_len {
+        let mut compteurs = if let Some(len) = last_meter_len {
             VecMap::with_capacity(len)
         } else {
             VecMap::new()
@@ -263,11 +231,7 @@ impl Client {
         for (tic_field, value) in tic_frame {
             if tic_field == "PTEC" {
                 let tic::Value::String(s) = value.clone() else {
-                    log::warn!(
-                        "PTEC {} is not a string, got {:?}",
-                        tic_field,
-                        value
-                    );
+                    log::warn!("PTEC {} is not a string, got {:?}", tic_field, value);
                     continue;
                 };
                 let ptec_key = self
@@ -287,44 +251,29 @@ impl Client {
                     );
                     continue;
                 };
-                meters.push_no_check(meter_key.to_string(), *i as u32);
+                compteurs.push_no_check(meter_key.to_string(), *i as u32);
             }
         }
 
-        if meters.is_empty() {
+        if compteurs.is_empty() {
             log::warn!("No meter fields found in TIC frame, skipping MQTT publish");
             return Ok(None);
         }
 
-        let meter_len = meters.len();
+        let meter_len = compteurs.len();
 
-        let properties = PublishProperties {
-            content_type: Some("text/plain".to_string()),
-            message_expiry_interval: Some(self.config.compteurs.min_interval.as_secs() as u32 * 2),
-            ..Default::default()
+        let msg = mqtt::topics::Compteurs {
+            active: active.clone(),
+            compteurs,
         };
 
-        let msg = mqtt::topics::Compteurs { active, compteurs: meters };
-        let topic = mqtt::topics::Compteurs::topic();
-        log::debug!("Publishing meters to MQTT: {} = {:?}", topic, msg);
-
-        let payload = serde_json::to_vec(&msg)?;
-
         self.client
-            .publish_with_properties(topic, QoS::AtLeastOnce, true, payload, properties.clone())
+            .publish(&msg, QoS::AtLeastOnce, true)
             .await?;
 
-        if let Some(active) = &msg.active {
-            let active_topic = mqtt::topics::CompteurActif::topic();
-            let active_payload = serde_json::to_vec(&mqtt::topics::CompteurActif(active.clone()))?;
+        if let Some(active) = active {
             self.client
-                .publish_with_properties(
-                    active_topic,
-                    QoS::AtLeastOnce,
-                    true,
-                    active_payload,
-                    properties,
-                )
+                .publish(&CompteurActif(active), QoS::AtLeastOnce, true)
                 .await?;
         }
 

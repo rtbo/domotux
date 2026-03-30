@@ -2,18 +2,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::vecmap::VecMap;
 
-pub trait Topic {
-    fn topic() -> String;
-}
+use super::Topic;
 
 /// Apparent power of the installation, as seen by the meter. Should be <= subscribed power.
 /// A negative value means that the installation produces power (ex: solar panels).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PApp(pub f32);
 
+impl From<f32> for PApp {
+    fn from(value: f32) -> Self {
+        Self(value)
+    }
+}
+
 impl Topic for PApp {
-    fn topic() -> String {
-        "domotux/papp".to_string()
+    fn topic() -> &'static str {
+        "domotux/papp"
     }
 }
 
@@ -29,17 +33,23 @@ pub struct Compteurs {
 }
 
 impl Topic for Compteurs {
-    fn topic() -> String {
-        "domotux/compteurs".to_string()
+    fn topic() -> &'static str {
+        "domotux/compteurs"
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompteurActif(pub String);
 
+impl From<String> for CompteurActif {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
 impl Topic for CompteurActif {
-    fn topic() -> String {
-        "domotux/compteurs/actif".to_string()
+    fn topic() -> &'static str {
+        "domotux/compteurs/actif"
     }
 }
 
@@ -52,8 +62,8 @@ pub struct Contrat {
 }
 
 impl Topic for Contrat {
-    fn topic() -> String {
-        "domotux/contrat".to_string()
+    fn topic() -> &'static str {
+        "domotux/contrat"
     }
 }
 
@@ -62,9 +72,15 @@ impl Topic for Contrat {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrixKwh(pub VecMap<f32>);
 
+impl From<VecMap<f32>> for PrixKwh {
+    fn from(m: VecMap<f32>) -> Self {
+        Self(m)
+    }
+}
+
 impl Topic for PrixKwh {
-    fn topic() -> String {
-        "domotux/prix_kwh".to_string()
+    fn topic() -> &'static str {
+        "domotux/prix_kwh"
     }
 }
 
@@ -72,9 +88,15 @@ impl Topic for PrixKwh {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrixKwhActif(pub f32);
 
+impl From<f32> for PrixKwhActif {
+    fn from(value: f32) -> Self {
+        Self(value)
+    }
+}
+
 impl Topic for PrixKwhActif {
-    fn topic() -> String {
-        "domotux/prix_kwh/actif".to_string()
+    fn topic() -> &'static str {
+        "domotux/prix_kwh/actif"
     }
 }
 

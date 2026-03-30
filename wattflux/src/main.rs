@@ -1,15 +1,20 @@
+use base::mqtt::{self, topics::{Compteurs, PApp}};
 use clap::Parser;
+use rumqttc::v5::mqttbytes::QoS;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, process, str};
-use tokio::sync;
 
 mod influx;
-mod subscribe;
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MqttConfig {
+    broker: base::mqtt::BrokerAddress,
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Config {
     influx: influx::Config,
-    subscribe: subscribe::Config,
+    mqtt: MqttConfig,
 }
 
 #[derive(Debug, Parser)]
@@ -36,6 +41,13 @@ async fn main() -> process::ExitCode {
     }
 }
 
+base::mqtt_subscribe_msg!{
+    enum Msg {
+        PApp(PApp),
+        Compteurs(Compteurs),
+    }
+}
+
 async fn run(cli: Cli) -> Result<(), anyhow::Error> {
     if cli.default_config {
         return base::cfg::print_default_config::<Config>();
@@ -45,33 +57,21 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
     log::info!("Starting with config: {:#?}", config);
 
     let Config {
-        subscribe: mqtt_cfg,
+        mqtt: mqtt_cfg,
         influx: influx_cfg,
     } = config;
 
     let influx = influx::Client::new(influx_cfg);
 
-    let (mut mqtt_client, mqtt_evloop) = subscribe::Client::new(mqtt_cfg.clone());
-    mqtt_client.subscribe().await?;
-
-    let (tx, mut rx) = sync::mpsc::channel(100);
-
-    base::mqtt::spawn_event_loop(mqtt_evloop, tx);
+    let mut mqtt_client = mqtt::Client::<Msg>::new("wattflux", mqtt_cfg.broker);
+    mqtt_client.subscribe::<PApp>(QoS::AtMostOnce).await?;
+    mqtt_client.subscribe::<Compteurs>(QoS::AtLeastOnce).await?;
 
     loop {
-        if let Some(event) = rx.recv().await {
-            let msg = match mqtt_client.translate_event(event).await {
-                Ok(Some(m)) => m,
-                Ok(None) => continue,
-                Err(e) => {
-                    log::warn!("Failed to translate MQTT message: {}", e);
-                    continue;
-                }
-            };
-            log::debug!("Received MQTT message {msg:#?}");
+        if let Some(msg) = mqtt_client.recv().await {
             let res = match msg {
-                subscribe::Msg::PApp(power) => influx.write_papp_line(power).await,
-                subscribe::Msg::Compteurs(meters) => influx.write_compteurs_line(meters).await,
+                Msg::PApp(power) => influx.write_papp_line(power).await,
+                Msg::Compteurs(meters) => influx.write_compteurs_line(meters).await,
             };
             if let Err(e) = res {
                 log::error!("Failed to publish to InfluxDB: {}", e);
