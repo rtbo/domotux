@@ -35,6 +35,15 @@ impl Topic for Compteurs {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompteurActif(pub String);
+
+impl Topic for CompteurActif {
+    fn topic() -> String {
+        "domotux/compteurs/actif".to_string()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contrat {
     /// Subscribed power in KVA
     pub subsc_power: Option<u32>,
@@ -49,13 +58,23 @@ impl Topic for Contrat {
 }
 
 
-/// The price per kWh for the a selected option.
+/// The price per kWh for a selected option.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrixKwh(pub VecMap<f32>);
 
 impl Topic for PrixKwh {
     fn topic() -> String {
         "domotux/prix_kwh".to_string()
+    }
+}
+
+/// The price per kWh for the currently active compteur
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrixKwhActif(pub f32);
+
+impl Topic for PrixKwhActif {
+    fn topic() -> String {
+        "domotux/prix_kwh/actif".to_string()
     }
 }
 

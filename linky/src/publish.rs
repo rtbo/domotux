@@ -311,8 +311,23 @@ impl Client {
         let payload = serde_json::to_vec(&msg)?;
 
         self.client
-            .publish_with_properties(topic, QoS::AtMostOnce, true, payload, properties)
+            .publish_with_properties(topic, QoS::AtLeastOnce, true, payload, properties.clone())
             .await?;
+
+        if let Some(active) = &msg.active {
+            let active_topic = mqtt::topics::CompteurActif::topic();
+            let active_payload = serde_json::to_vec(&mqtt::topics::CompteurActif(active.clone()))?;
+            self.client
+                .publish_with_properties(
+                    active_topic,
+                    QoS::AtLeastOnce,
+                    true,
+                    active_payload,
+                    properties,
+                )
+                .await?;
+        }
+
         Ok(Some(meter_len))
     }
 }

@@ -5,7 +5,7 @@ After=network.target
 [Service]
 ExecStart=tarifs-cre
 Restart=always
-#Environment="RUST_LOG=debug"
+Environment="RUST_LOG=info"
 
 [Install]
 WantedBy=multi-user.target

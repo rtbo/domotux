@@ -15,15 +15,15 @@ const HPHC_ID: &str = "f7303b3a-93c7-4242-813d-84919034c416";
 const TEMPO_ID: &str = "0c3d1d36-c412-4620-8566-e5cbb4fa2b5a";
 
 pub async fn fetch_kwh_price(
-    contract: &Contrat,
+    contrat: &Contrat,
     date: Option<NaiveDate>,
 ) -> anyhow::Result<Option<PrixKwh>> {
     let date = date.unwrap_or_else(|| chrono::Local::now().date_naive());
-    match contract.option.as_deref() {
-        Some("base") => fetch_kwh_price_for::<BaseRow>(BASE_ID, contract.subsc_power, date).await,
-        Some("hphc") => fetch_kwh_price_for::<HphcRow>(HPHC_ID, contract.subsc_power, date).await,
+    match contrat.option.as_deref() {
+        Some("base") => fetch_kwh_price_for::<BaseRow>(BASE_ID, contrat.subsc_power, date).await,
+        Some("hphc") => fetch_kwh_price_for::<HphcRow>(HPHC_ID, contrat.subsc_power, date).await,
         Some("tempo") => {
-            fetch_kwh_price_for::<TempoRow>(TEMPO_ID, contract.subsc_power, date).await
+            fetch_kwh_price_for::<TempoRow>(TEMPO_ID, contrat.subsc_power, date).await
         }
         _ => anyhow::bail!("Unknown contract option"),
     }

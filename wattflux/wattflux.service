@@ -7,7 +7,7 @@ After=influxdb3-core.service
 [Service]
 ExecStart=wattflux
 Restart=always
-# Environment="RUST_LOG=debug"
+Environment="RUST_LOG=info"
 
 [Install]
 WantedBy=multi-user.target
