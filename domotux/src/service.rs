@@ -33,7 +33,7 @@ pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "domotux=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| "domotux=info,tower_http=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -172,6 +172,8 @@ async fn dashboard_ws(
 }
 
 async fn handle_dashboard_ws(mut socket: WebSocket, state: Arc<AppState>, _user: String) {
+    log::info!("Dashboard WebSocket connection established for user '{}'", _user);
+    log::info!("Subscribing to MQTT topics on broker {}", state.broker);
     let mut client =
         mqtt::Client::<DashboardMsg>::new("domotux_dashboard_ws", state.broker.clone());
     client.subscribe_all(QoS::AtMostOnce).await.unwrap();
