@@ -10,9 +10,9 @@ anyhow.workspace = true
 axum.workspace = true
 clap.workspace = true
 dirs.workspace = true
-env_logger.workspace = true
 log.workspace = true
 rand.workspace = true
+rumqttc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yml.workspace = true
@@ -24,4 +24,5 @@ base64 = "0.22.1"
 sha2 = "0.10.9"
 arboard = { version = "3.6.1", default-features = false }
 hmac = "0.12.1"
-tower-http = { version = "0.6.8", features = ["cors"] }
+tower-http = { version = "0.6.8", features = ["cors", "trace"] }
+tracing-subscriber = "0.3.23"

@@ -1,9 +1,9 @@
 use std::{
-    env,
     path::{Path, PathBuf},
     process,
 };
 
+use base::mqtt::BrokerAddress;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 
@@ -12,25 +12,24 @@ mod service;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Config {
+    broker: BrokerAddress,
     db_path: PathBuf,
     bind_addr: String,
-    secret_key: Option<String>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         let db_path = default_db_path().expect("Could not determine config directory");
         Self {
+            broker: BrokerAddress::default(),
             db_path,
             bind_addr: "0.0.0.0:3030".to_string(),
-            secret_key: None,
         }
     }
 }
 
 fn default_db_path() -> Option<PathBuf> {
-    let data_dir = dirs::data_dir()
-        .map(|dir| dir.join("domotux"))?;
+    let data_dir = dirs::data_dir().map(|dir| dir.join("domotux"))?;
     Some(data_dir.join("domotux.db"))
 }
 
@@ -38,26 +37,22 @@ fn default_db_path() -> Option<PathBuf> {
 struct Cli {
     #[clap(subcommand)]
     command: Option<Command>,
+
+    #[clap(long)]
+    default_config: bool,
+
+    #[clap(short, long)]
+    broker: Option<String>,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    Initialize {
-        db_path: Option<PathBuf>,
-    },
+    Initialize { db_path: Option<PathBuf> },
     CreateUser,
-    GenSecret {
-        #[clap(short, long)]
-        write_to_config: bool,
-        #[clap(short, long)]
-        clipboard: bool,
-    },
 }
 
 #[tokio::main]
 async fn main() -> process::ExitCode {
-    env_logger::init();
-
     let cli = Cli::parse();
 
     if let Err(e) = run(cli).await {
@@ -81,14 +76,11 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         Some(Command::CreateUser) => {
             create_user(&config.db_path).await?;
         }
-        Some(Command::GenSecret {
-            write_to_config,
-            clipboard,
-        }) => {
-            generate_secret_key(&mut config, *write_to_config, *clipboard).await?;
-        }
         None => {
-            start_service(config).await?;
+            if let Some(broker) = cli.broker {
+                config.broker = broker.parse()?;
+            }
+            service::start(&config).await?;
         }
     }
     Ok(())
@@ -118,14 +110,6 @@ async fn initialize(config: &mut Config, db_path_cli: Option<&Path>) -> anyhow::
     }
     println!("Database initialized successfully at {}", db_path.display());
     println!("You can now create a user with the 'create-user' command.");
-
-    if config.secret_key.is_none() && env::var_os("DOMOTUX_SECRET_KEY").is_none() {
-        eprintln!("No secret key configured. To start the service you must set a secret key.");
-        eprintln!(
-            "This can be done by setting the DOMOTUX_SECRET_KEY environment variable or by adding a 'secret_key' field to the config file."
-        );
-        eprintln!("The command 'gen-secret' can be used to generate a random secret key.");
-    }
 
     Ok(())
 }
@@ -165,64 +149,5 @@ fn validate_password(password: &str) -> anyhow::Result<()> {
     if password.len() < 3 {
         anyhow::bail!("Password must be at least 3 characters long");
     }
-    Ok(())
-}
-
-async fn generate_secret_key(
-    config: &mut Config,
-    write_to_config: bool,
-    clipboard: bool,
-) -> anyhow::Result<()> {
-    use base64::prelude::*;
-    use rand::RngExt;
-
-    let mut rng = rand::rng();
-    let key: [u8; 32] = rng.random();
-    let secret_key = BASE64_STANDARD.encode(key);
-
-    let mut done = false;
-
-    if write_to_config {
-        println!("Updating config file with new secret key.");
-        config.secret_key = Some(secret_key.clone());
-        base::cfg::save_config("domotux", &config, None).await?;
-        done = true;
-    }
-
-    if clipboard {
-        if let Err(e) = arboard::Clipboard::new()
-            .and_then(|mut clipboard| clipboard.set_text(secret_key.clone()))
-        {
-            log::error!("Failed to copy secret key to clipboard: {}", e);
-        } else {
-            log::info!("Secret key copied to clipboard.");
-        }
-        done = true;
-    }
-
-    if !done {
-        println!("{}", secret_key);
-    }
-
-    Ok(())
-}
-
-async fn start_service(config: Config) -> anyhow::Result<()> {
-    log::info!("Starting domotux service");
-
-    let secret_key = config
-        .secret_key
-        .clone()
-        .or_else(|| env::var("DOMOTUX_SECRET_KEY").ok())
-        .ok_or_else(|| anyhow::anyhow!(
-            "No secret key configured. Set the DOMOTUX_SECRET_KEY environment variable or add a 'secret_key' field to the config file."))?;
-
-    if secret_key.len() < 12 {
-        anyhow::bail!("Secret key must be at least 12 characters long. Use the 'gen-secret' command to generate a valid secret key.");
-    }
-
-    let config = Config { secret_key: Some(secret_key), ..config };
-
-    service::start(&config).await?;
     Ok(())
 }
