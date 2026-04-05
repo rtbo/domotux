@@ -76,6 +76,7 @@ impl<S> Client<S> {
     {
         let topic = P::topic();
         let payload = serde_json::to_vec(msg)?;
+        log::debug!("Publishing MQTT {} = {}", topic, str::from_utf8(&payload).unwrap_or("not utf8"));
         self.client.publish(topic, qos, retain, payload).await?;
         Ok(())
     }

@@ -94,6 +94,8 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
 
     let mut last_pub: Option<tokio::time::Instant> = None;
     let mut prix_kwh = None;
+    let mut compteur_actif = None;
+    let mut prix_kwh_actif: Option<PrixKwhActif> = None;
 
     loop {
         let validity = expiration
@@ -107,18 +109,9 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
                 match msg {
                     Some(Msg::Contrat(c)) => {
                         prix_kwh = fetch_kwh_price(&c, None).await?;
-                        if let Some(prix_kwh) = &prix_kwh {
-                            let now = tokio::time::Instant::now();
-                            client.publish(prix_kwh, QoS::AtLeastOnce, true).await?;
-                            last_pub = Some(now);
-                        }
                     }
                     Some(Msg::CompteurActif(ca)) => {
-                        if let Some(prix_kwh) = &prix_kwh {
-                            if let Some(val) = prix_kwh.0.get(&ca.0) {
-                                client.publish(&PrixKwhActif(*val), QoS::AtLeastOnce, true).await?;
-                            }
-                        }
+                        compteur_actif = Some(ca);
                     }
                     None => {
                         anyhow::bail!("Channel closed!");
@@ -127,5 +120,26 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
             }
             _ = sleep_fut => {}
         }
+
+        let now = tokio::time::Instant::now();
+
+        if let Some(prix_kwh) = &prix_kwh {
+            client.publish(prix_kwh, QoS::AtLeastOnce, true).await?;
+            if let Some(ca) = &compteur_actif {
+                if let Some(val) = prix_kwh.0.get(&ca.0) {
+                    if let Some(prix_kwh_actif) = &prix_kwh_actif {
+                        if prix_kwh_actif.0 == *val {
+                            continue;
+                        }
+                    }
+                    client
+                        .publish(&PrixKwhActif(*val), QoS::AtLeastOnce, true)
+                        .await?;
+                    prix_kwh_actif = Some(PrixKwhActif(*val));
+                }
+            }
+        }
+
+        last_pub = Some(now);
     }
 }

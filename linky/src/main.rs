@@ -67,7 +67,7 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
     loop {
         tokio::select! {
             Some(tic_frame) = rx.recv() => {
-                log::debug!("Received TIC update: {:?}", tic_frame);
+                log::debug!("Received TIC frame");
                 if let Err(e) = mqtt_client.publish(tic_frame).await {
                     log::warn!("Failed to publish MQTT message: {}", e);
                 }

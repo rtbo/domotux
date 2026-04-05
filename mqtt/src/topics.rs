@@ -1,3 +1,6 @@
+use std::str::FromStr;
+
+use anyhow::Ok;
 use base::vecmap::VecMap;
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +20,48 @@ impl From<f32> for PApp {
 impl Topic for PApp {
     fn topic() -> &'static str {
         "domotux/papp"
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum CouleurTempo {
+    Bleu,
+    Blanc,
+    Rouge,
+}
+
+impl FromStr for CouleurTempo {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("bleu") {
+            Ok(CouleurTempo::Bleu)
+        } else if s.eq_ignore_ascii_case("blanc") {
+            Ok(CouleurTempo::Blanc)
+        } else if s.eq_ignore_ascii_case("rouge") {
+            Ok(CouleurTempo::Rouge)
+        } else {
+            Err(anyhow::anyhow!("Couleur Tempo inconnue: {}", s))
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct CouleurTempoAujourdhui(pub CouleurTempo);
+
+
+impl Topic for CouleurTempoAujourdhui {
+    fn topic() -> &'static str {
+        "domotux/tempo/aujourdhui"
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct CouleurTempoDemain(pub CouleurTempo);
+
+
+impl Topic for CouleurTempoDemain {
+    fn topic() -> &'static str {
+        "domotux/tempo/demain"
     }
 }
 
@@ -53,6 +98,7 @@ impl Topic for CompteurActif {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Contrat {
     /// Subscribed power in KVA
     pub subsc_power: Option<u32>,

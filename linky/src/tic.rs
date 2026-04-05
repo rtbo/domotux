@@ -111,9 +111,6 @@ pub async fn read_loop(
         "ADCO".to_string(),
         "MOTDETAT".to_string(),
         "IMAX".to_string(),
-        // Couleur du lendemain.
-        // Arrive à 20H sur le TIC, on peut l'avoir dès 11H avec service web.
-        "DEMAIN".to_string(),
     ];
 
     'frame: loop {
