@@ -1,14 +1,14 @@
 const serverHost = import.meta.env.VITE_API_SERVER_HOST || 'localhost:3030'
 
-export function makeUrl(protocol: string, path: string): string {
+export function makeUrl (protocol: string, path: string): string {
   return `${protocol}://${serverHost}/v1${path}`
 }
 
-export function restUrl(path: string): string {
+export function restUrl (path: string): string {
   return makeUrl('http', path)
 }
 
-export function wsUrl(path: string): string {
+export function wsUrl (path: string): string {
   return makeUrl('ws', path)
 }
 
