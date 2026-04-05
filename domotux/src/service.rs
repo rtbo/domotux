@@ -7,24 +7,43 @@ use axum::extract::ws::WebSocket;
 use axum::extract::{Query, State, WebSocketUpgrade};
 use axum::http::{self, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::any;
-use mqtt::topics::{PApp, PrixKwhActif};
+use axum::routing::{any, get};
+use base::vecmap::VecMap;
+use mqtt::topics::{
+    CompteurActif, Contrat, CouleurTempo, CouleurTempoAujourdhui, CouleurTempoDemain, PApp, PrixKwh, PrixKwhActif
+};
 use mqtt::{self, QoS};
 use serde::{Deserialize, Serialize};
+use tokio::{sync, task};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::db;
+use crate::service::jwt::JwtVerifier;
 
 mod jwt;
+
+/// MQTT state shared across handlers
+/// This include only the latest values received for "slow" topics.
+/// "Fast" topics like PApp are directly sent to the WebSocket without going through this state.
+#[derive(Debug, Default)]
+struct MqttState {
+    contrat: Option<Contrat>,
+    compteur_actif: Option<CompteurActif>,
+    prix_kwh_actif: Option<PrixKwhActif>,
+    prix_kwh: Option<PrixKwh>,
+    couleur_ajd: Option<CouleurTempoAujourdhui>,
+    couleur_demain: Option<CouleurTempoDemain>,
+}
 
 #[derive(Debug)]
 pub struct AppState {
     db: db::Db,
     broker: mqtt::BrokerAddress,
     secret_key: String,
+    mqtt: sync::Mutex<MqttState>,
 }
 
 pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
@@ -43,20 +62,16 @@ pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
         log::error!("Database not initialized, please run `domotux initialize` first");
     }
 
-    let secret_key = {
-        use base64::prelude::*;
-        use rand::RngExt;
-
-        let mut rng = rand::rng();
-        let key: [u8; 16] = rng.random();
-        BASE64_STANDARD.encode(key)
-    };
+    let secret_key = generate_secret_key();
 
     let state = Arc::new(AppState {
         db,
         broker: config.broker.clone(),
         secret_key,
+        mqtt: sync::Mutex::new(MqttState::default()),
     });
+
+    mqtt_loop(state.clone());
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -66,7 +81,8 @@ pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
     // build our application with a single route
     let app = axum::Router::new()
         .route("/v1/auth", post(authenticate_user))
-        .route("/v1/dashboard_ws", any(dashboard_ws))
+        .route("/v1/papp_ws", any(papp_ws))
+        .route("/v1/info_contrat", get(get_info_contrat))
         .layer(cors)
         .layer(
             TraceLayer::new_for_http()
@@ -83,6 +99,71 @@ pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
     axum::serve(listener, app).await.unwrap();
 
     Ok(())
+}
+
+#[cfg(feature = "no-secret")]
+fn generate_secret_key() -> String {
+    #[cfg(debug_assertions)]
+    {
+        log::warn!("Running in debug mode with 'no-secret' feature, using fixed secret key");
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        assert!(
+            false,
+            "The 'no-secret' feature should only be used in debug mode for testing purposes"
+        );
+    }
+    "not-so-secret".to_string()
+}
+
+#[cfg(not(feature = "no-secret"))]
+fn generate_secret_key() -> String {
+    use base64::prelude::*;
+    use rand::RngExt;
+
+    let mut rng = rand::rng();
+    let key: [u8; 16] = rng.random();
+    BASE64_STANDARD.encode(key)
+}
+
+mqtt::subscribe_msg! {
+    enum MqttMsg {
+        Contrat(Contrat),
+        CompteurActif(CompteurActif),
+        PrixKwhActif(PrixKwhActif),
+        PrixKwh(PrixKwh),
+        CouleurTempoAjd(CouleurTempoAujourdhui),
+        CouleurTempoDemain(CouleurTempoDemain),
+    }
+}
+
+fn mqtt_loop(state: Arc<AppState>) -> task::JoinHandle<()> {
+    let mut client = mqtt::Client::<MqttMsg>::new("domotux_service", state.broker.clone());
+    tokio::spawn(async move {
+        client.subscribe_all(QoS::AtLeastOnce).await.unwrap();
+        loop {
+            if let Some(msg) = client.recv().await {
+                let mut mqtt_state = state.mqtt.lock().await;
+                match msg {
+                    MqttMsg::Contrat(contrat) => mqtt_state.contrat = Some(contrat),
+                    MqttMsg::CompteurActif(compteur_actif) => {
+                        mqtt_state.compteur_actif = Some(compteur_actif)
+                    }
+                    MqttMsg::PrixKwhActif(prix_kwh_actif) => {
+                        mqtt_state.prix_kwh_actif = Some(prix_kwh_actif)
+                    }
+                    MqttMsg::PrixKwh(prix_kwh) => mqtt_state.prix_kwh = Some(prix_kwh),
+                    MqttMsg::CouleurTempoAjd(couleur_ajd) => {
+                        mqtt_state.couleur_ajd = Some(couleur_ajd)
+                    }
+                    MqttMsg::CouleurTempoDemain(couleur_demain) => {
+                        mqtt_state.couleur_demain = Some(couleur_demain)
+                    }
+                }
+            }
+        }
+    })
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -139,19 +220,18 @@ async fn authenticate_user(
 }
 
 mqtt::subscribe_msg! {
-    enum DashboardMsg {
+    enum PAppMsg {
         PApp(PApp),
-        PrixKwhActif(PrixKwhActif),
     }
 }
 
 #[axum::debug_handler]
-async fn dashboard_ws(
+async fn papp_ws(
     State(state): State<Arc<AppState>>,
     Query(query): Query<HashMap<String, String>>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    log::info!("Dashboard WebSocket connection attempt");
+    log::info!("PApp WebSocket connection attempt");
 
     let user = if let Some(token) = query.get("token") {
         match jwt::verify_jwt::<JwtClaims>(token, &state.secret_key) {
@@ -162,35 +242,24 @@ async fn dashboard_ws(
             }
         }
     } else {
-        log::warn!("Missing token for Dashboard WebSocket connection");
+        log::warn!("Missing token for PApp WebSocket connection");
         return (StatusCode::BAD_REQUEST, "Missing token".to_string()).into_response();
     };
 
     log::info!("User '{}' authenticated successfully", user);
 
-    ws.on_upgrade(move |socket| handle_dashboard_ws(socket, state, user))
+    ws.on_upgrade(move |socket| handle_papp_ws(socket, state, user))
 }
 
-async fn handle_dashboard_ws(mut socket: WebSocket, state: Arc<AppState>, _user: String) {
-    log::info!("Dashboard WebSocket connection established for user '{}'", _user);
+async fn handle_papp_ws(mut socket: WebSocket, state: Arc<AppState>, _user: String) {
+    log::info!("PApp WebSocket connection established for user '{}'", _user);
     log::info!("Subscribing to MQTT topics on broker {}", state.broker);
-    let mut client =
-        mqtt::Client::<DashboardMsg>::new("domotux_dashboard_ws", state.broker.clone());
+    let mut client = mqtt::Client::<PAppMsg>::new("domotux_dashboard_ws", state.broker.clone());
     client.subscribe_all(QoS::AtMostOnce).await.unwrap();
     loop {
         match client.recv().await {
-            Some(DashboardMsg::PApp(papp)) => {
+            Some(PAppMsg::PApp(papp)) => {
                 let msg = format!("papp={}", papp.0);
-                if socket
-                    .send(axum::extract::ws::Message::Text(msg.into()))
-                    .await
-                    .is_err()
-                {
-                    break;
-                }
-            }
-            Some(DashboardMsg::PrixKwhActif(prix_kwh)) => {
-                let msg = format!("prixKwh={}", prix_kwh.0);
                 if socket
                     .send(axum::extract::ws::Message::Text(msg.into()))
                     .await
@@ -202,4 +271,44 @@ async fn handle_dashboard_ws(mut socket: WebSocket, state: Arc<AppState>, _user:
             None => {}
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct InfoContrat {
+    subsc_power: Option<u32>,
+    option: Option<String>,
+    compteur_actif: Option<String>,
+    prix_kwh_actif: Option<f32>,
+    prix_kwh: Option<VecMap<f32>>,
+    couleur_ajd: Option<CouleurTempo>,
+    couleur_demain: Option<CouleurTempo>,
+}
+
+async fn get_info_contrat(
+    State(state): State<Arc<AppState>>,
+    _: JwtVerifier<JwtClaims>,
+) -> Result<Json<InfoContrat>, (StatusCode, &'static str)> {
+    let mqtt_state = state.mqtt.lock().await;
+    let mut res = InfoContrat::default();
+    if let Some(contrat) = mqtt_state.contrat.as_ref() {
+        res.subsc_power = contrat.subsc_power;
+        res.option = contrat.option.clone();
+    }
+    if let Some(compteur_actif) = mqtt_state.compteur_actif.as_ref() {
+        res.compteur_actif = Some(compteur_actif.0.clone());
+    }
+    if let Some(prix_kwh_actif) = mqtt_state.prix_kwh_actif.as_ref() {
+        res.prix_kwh_actif = Some(prix_kwh_actif.0);
+    }
+    if let Some(prix_kwh) = mqtt_state.prix_kwh.as_ref() {
+        res.prix_kwh = Some(prix_kwh.0.clone());
+    }
+    if let Some(couleur_ajd) = mqtt_state.couleur_ajd.as_ref() {
+        res.couleur_ajd = Some(couleur_ajd.0);
+    }
+    if let Some(couleur_demain) = mqtt_state.couleur_demain.as_ref() {
+        res.couleur_demain = Some(couleur_demain.0);
+    }
+    Ok(Json(res))
 }

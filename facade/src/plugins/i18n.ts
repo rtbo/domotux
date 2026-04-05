@@ -4,11 +4,19 @@ const messages = {
   en: {
     message: {
       papp: 'Apparent Power',
+      psousc: 'Subscribed Power',
+      currently: 'Currently',
+      tomorrow: 'Tomorrow',
+      tempoContract: 'Tempo Contract',
     },
   },
   fr: {
     message: {
       papp: 'Puissance Apparente',
+      currently: 'En ce moment',
+      tomorrow: 'Demain',
+      psousc: 'Puissance Souscrite',
+      tempoContract: 'Contrat Tempo',
     },
   },
 }

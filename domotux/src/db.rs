@@ -37,7 +37,8 @@ impl Db {
         }
 
         conn.execute(
-            "CREATE TABLE users (
+            "
+            CREATE TABLE users (
                 name TEXT PRIMARY KEY,
                 pwd BLOB NOT NULL,
                 salt BLOB NOT NULL

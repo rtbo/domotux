@@ -3,6 +3,9 @@ name = "domotux"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+no-secret = []
+
 [dependencies]
 base.workspace = true
 mqtt.workspace = true

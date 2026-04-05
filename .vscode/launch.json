@@ -20,7 +20,8 @@
                 "args": [
                     "build",
                     "--bin=domotux",
-                    "--package=domotux"
+                    "--package=domotux",
+                    "--features=no-secret"
                 ]
             },
             "args": []
