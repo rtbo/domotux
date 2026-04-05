@@ -3,33 +3,39 @@ import Vue from '@vitejs/plugin-vue'
 import UnoCSS from 'unocss/vite'
 import Fonts from 'unplugin-fonts/vite'
 import { defineConfig } from 'vite'
+import vueDevTools from 'vite-plugin-vue-devtools'
 import Vuetify, { transformAssetUrls } from 'vite-plugin-vuetify'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [Vue({
-    template: { transformAssetUrls },
-  }), // https://github.com/vuetifyjs/vuetify-loader/tree/master/packages/vite-plugin#readme
-  Vuetify({
-    autoImport: true,
-    styles: {
-      configFile: 'src/styles/settings.scss',
-    },
-  }), Fonts({
-    fontsource: {
-      families: [
-        {
-          name: 'Roboto Mono',
-          weights: [400, 700],
-        },
-        {
-          name: 'Roboto',
-          weights: [100, 300, 400, 500, 700, 900],
-          styles: ['normal', 'italic'],
-        },
-      ],
-    },
-  }), UnoCSS()],
+  plugins: [
+    vueDevTools(),
+    Vue({
+      template: { transformAssetUrls },
+    }), // https://github.com/vuetifyjs/vuetify-loader/tree/master/packages/vite-plugin#readme
+    Vuetify({
+      autoImport: true,
+      styles: {
+        configFile: 'src/styles/settings.scss',
+      },
+    }),
+    Fonts({
+      fontsource: {
+        families: [
+          {
+            name: 'Roboto Mono',
+            weights: [400, 700],
+          },
+          {
+            name: 'Roboto',
+            weights: [100, 300, 400, 500, 700, 900],
+            styles: ['normal', 'italic'],
+          },
+        ],
+      },
+    }),
+    UnoCSS(),
+  ],
   define: { 'process.env': {} },
   resolve: {
     alias: {
