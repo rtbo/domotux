@@ -1,10 +1,8 @@
-use std::{
-    path::{Path, PathBuf},
-    process,
-};
+use std::path::{Path, PathBuf};
+use std::process;
 
-use mqtt::BrokerAddress;
 use clap::{Parser, Subcommand};
+use mqtt::BrokerAddress;
 use serde::{Deserialize, Serialize};
 
 mod db;

@@ -1,7 +1,9 @@
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
+use std::time::Duration;
 
 use base::vecmap::VecMap;
-use mqtt::{QoS, topics::CompteurActif};
+use mqtt::QoS;
+use mqtt::topics::CompteurActif;
 use serde::{Deserialize, Serialize};
 
 use crate::tic;
@@ -135,7 +137,8 @@ impl Client {
 
         let meters_fut = async {
             if publish_meters {
-                self.publish_compteurs(&tic_frame, self.last_meter_len).await
+                self.publish_compteurs(&tic_frame, self.last_meter_len)
+                    .await
             } else {
                 Ok(None)
             }
@@ -163,9 +166,7 @@ impl Client {
                 .ok_or_else(|| anyhow::anyhow!("Power value is not a number, got {:?}", value))?,
         );
 
-        self.client
-            .publish(&papp, QoS::AtMostOnce, true)
-            .await?;
+        self.client.publish(&papp, QoS::AtMostOnce, true).await?;
         Ok(())
     }
 
@@ -267,9 +268,7 @@ impl Client {
             compteurs,
         };
 
-        self.client
-            .publish(&msg, QoS::AtLeastOnce, true)
-            .await?;
+        self.client.publish(&msg, QoS::AtLeastOnce, true).await?;
 
         if let Some(active) = active {
             self.client

@@ -1,10 +1,9 @@
-use std::{fmt, time::Duration};
+use std::fmt;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt},
-    sync,
-};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt};
+use tokio::sync;
 use tokio_serial::{DataBits, Parity, SerialStream, StopBits};
 
 /// Configuration for the TIC reader

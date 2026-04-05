@@ -1,13 +1,11 @@
-use rumqttc::v5::{
-    Event,
-    mqttbytes::{QoS, v5::Packet},
-};
+use rumqttc::v5::Event;
+use rumqttc::v5::mqttbytes::QoS;
+use rumqttc::v5::mqttbytes::v5::Packet;
 use serde::Serialize;
 use tokio::{sync, task};
 
-use crate::Topic;
-
 use super::{BrokerAddress, SubscribeMsg};
+use crate::Topic;
 
 #[derive(Debug)]
 pub struct Client<S> {

@@ -58,7 +58,6 @@ impl<T> VecMap<T> {
     }
 }
 
-
 impl<T> serde::ser::Serialize for VecMap<T>
 where
     T: serde::ser::Serialize,

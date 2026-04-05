@@ -1,6 +1,5 @@
-use serde::{Deserialize, Serialize};
-
 use base::vecmap::VecMap;
+use serde::{Deserialize, Serialize};
 
 use super::Topic;
 
@@ -67,7 +66,6 @@ impl Topic for Contrat {
     }
 }
 
-
 /// The price per kWh for a selected option.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrixKwh(pub VecMap<f32>);
@@ -121,7 +119,10 @@ mod tests {
             compteurs: meters,
         };
         let payload = serde_json::to_string(&m).unwrap();
-        assert_eq!(payload, r#"{"active":"bleu","meters":{"bleuHp":100,"bleuHc":200}}"#);
+        assert_eq!(
+            payload,
+            r#"{"active":"bleu","meters":{"bleuHp":100,"bleuHc":200}}"#
+        );
     }
 
     #[test]

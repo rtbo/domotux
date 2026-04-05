@@ -1,5 +1,7 @@
+use std::fmt;
+use std::str::FromStr;
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use std::{fmt, str::FromStr};
 
 pub mod client;
 pub mod topics;

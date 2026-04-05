@@ -1,12 +1,11 @@
 //! Tarifs CRE
 //! See https://www.data.gouv.fr/datasets/historique-des-tarifs-reglementes-de-vente-delectricite-pour-les-consommateurs-residentiels
 
-use base::{
-    vecmap::VecMap,
-};
+use base::vecmap::VecMap;
 use chrono::NaiveDate;
 use mqtt::topics::{Contrat, PrixKwh};
-use serde::{Deserialize, Deserializer, de::DeserializeOwned};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer};
 
 use crate::tabular;
 
@@ -22,9 +21,7 @@ pub async fn fetch_kwh_price(
     match contrat.option.as_deref() {
         Some("base") => fetch_kwh_price_for::<BaseRow>(BASE_ID, contrat.subsc_power, date).await,
         Some("hphc") => fetch_kwh_price_for::<HphcRow>(HPHC_ID, contrat.subsc_power, date).await,
-        Some("tempo") => {
-            fetch_kwh_price_for::<TempoRow>(TEMPO_ID, contrat.subsc_power, date).await
-        }
+        Some("tempo") => fetch_kwh_price_for::<TempoRow>(TEMPO_ID, contrat.subsc_power, date).await,
         _ => anyhow::bail!("Unknown contract option"),
     }
 }

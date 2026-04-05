@@ -1,11 +1,11 @@
-use std::{path::PathBuf, process, time::Duration};
+use std::path::PathBuf;
+use std::process;
+use std::time::Duration;
 
-use mqtt;
-use mqtt::topics::CompteurActif;
-use mqtt::topics::Contrat;
-use mqtt::topics::PrixKwhActif;
-use mqtt::QoS;
 use clap::Parser;
+use mqtt;
+use mqtt::QoS;
+use mqtt::topics::{CompteurActif, Contrat, PrixKwhActif};
 use serde::{Deserialize, Serialize};
 
 use crate::cre::fetch_kwh_price;

@@ -1,8 +1,10 @@
-use mqtt::{self, topics::{Compteurs, PApp}};
-use mqtt::QoS;
+use std::path::PathBuf;
+use std::{process, str};
+
 use clap::Parser;
+use mqtt::topics::{Compteurs, PApp};
+use mqtt::{self, QoS};
 use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, process, str};
 
 mod influx;
 
@@ -41,7 +43,7 @@ async fn main() -> process::ExitCode {
     }
 }
 
-mqtt::subscribe_msg!{
+mqtt::subscribe_msg! {
     enum Msg {
         PApp(PApp),
         Compteurs(Compteurs),

@@ -1,5 +1,7 @@
+use std::path::PathBuf;
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, time::Duration};
 use tokio::fs;
 
 pub fn print_default_config<C>() -> Result<(), anyhow::Error>
@@ -77,14 +79,10 @@ where
 
 fn find_config_file(service_name: &str) -> Option<PathBuf> {
     let filename = format!("{}.yml", service_name);
-    if let Some(file) =
-        check_config_path(dirs::config_local_dir().map(|dir| dir.join(&filename)))
-    {
+    if let Some(file) = check_config_path(dirs::config_local_dir().map(|dir| dir.join(&filename))) {
         return Some(file);
     }
-    if let Some(file) =
-        check_config_path(dirs::config_dir().map(|dir| dir.join(&filename)))
-    {
+    if let Some(file) = check_config_path(dirs::config_dir().map(|dir| dir.join(&filename))) {
         return Some(file);
     }
     if let Some(file) =
@@ -147,8 +145,9 @@ where
     D: serde::Deserializer<'de>,
     T: serde::de::Deserialize<'de>,
 {
-    use serde::de::{MapAccess, Visitor};
     use std::marker::PhantomData;
+
+    use serde::de::{MapAccess, Visitor};
 
     struct FieldsVisitor<T>(PhantomData<T>);
 

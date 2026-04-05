@@ -20,9 +20,6 @@ pub struct Response<Row> {
     links: Links,
 }
 
-
-
-
 impl<'a, Row> Resource<'a, Row> {
     pub fn new(id: &'a str) -> Self {
         Self {
@@ -33,7 +30,10 @@ impl<'a, Row> Resource<'a, Row> {
     }
 
     pub fn data_url(&self) -> String {
-        format!("https://tabular-api.data.gouv.fr/api/resources/{}/data/", self.id)
+        format!(
+            "https://tabular-api.data.gouv.fr/api/resources/{}/data/",
+            self.id
+        )
     }
 
     pub async fn fetch_all(&self) -> anyhow::Result<Vec<Row>>

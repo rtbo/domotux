@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use tokio::{fs, io::{self, AsyncBufReadExt, AsyncWriteExt}};
+use tokio::fs;
+use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt};
 
 type DateTime = chrono::DateTime<chrono::Utc>;
 
@@ -89,13 +90,21 @@ async fn main() {
     // retrieve the oldest time
     for table in &config.tables {
         let filename = format!("{}_lines.txt", table.cur_name);
-        migrate_table_to_file(&client, &config, table, &filename).await.unwrap();
-        write_file_to_influxdb(&client, &config, table, &filename).await.unwrap();
+        migrate_table_to_file(&client, &config, table, &filename)
+            .await
+            .unwrap();
+        write_file_to_influxdb(&client, &config, table, &filename)
+            .await
+            .unwrap();
     }
 }
 
-async fn migrate_table_to_file(client: &reqwest::Client, config: &Config, table: &TableMig, filename: &str) -> anyhow::Result<()> {
-
+async fn migrate_table_to_file(
+    client: &reqwest::Client,
+    config: &Config,
+    table: &TableMig,
+    filename: &str,
+) -> anyhow::Result<()> {
     let mut line_file = fs::File::create(filename).await?;
 
     let time_span = table.time_span.unwrap_or(24 * 3600);
@@ -112,8 +121,12 @@ async fn migrate_table_to_file(client: &reqwest::Client, config: &Config, table:
     Ok(())
 }
 
-async fn write_file_to_influxdb(client: &reqwest::Client, config: &Config, table: &TableMig, filename: &str) -> anyhow::Result<()> {
-
+async fn write_file_to_influxdb(
+    client: &reqwest::Client,
+    config: &Config,
+    table: &TableMig,
+    filename: &str,
+) -> anyhow::Result<()> {
     // read chunks of 5000 lines from the file and write to influxdb
     let file = fs::File::open(filename).await?;
     let mut reader = io::BufReader::new(file);
@@ -124,7 +137,10 @@ async fn write_file_to_influxdb(client: &reqwest::Client, config: &Config, table
     while reader.read_line(&mut line_buf).await? > 0 {
         lines += 1;
         if lines >= 5000 {
-            println!("Writing {} lines to InfluxDB for table {}...", lines, table.cur_name);
+            println!(
+                "Writing {} lines to InfluxDB for table {}...",
+                lines, table.cur_name
+            );
             let mut new_buf = String::new();
             std::mem::swap(&mut line_buf, &mut new_buf);
             write_lines_to_influxdb(client, config, new_buf).await?;
@@ -143,7 +159,11 @@ async fn write_file_to_influxdb(client: &reqwest::Client, config: &Config, table
     Ok(())
 }
 
-async fn write_lines_to_influxdb(client: &reqwest::Client, config: &Config, lines: String) -> anyhow::Result<()> {
+async fn write_lines_to_influxdb(
+    client: &reqwest::Client,
+    config: &Config,
+    lines: String,
+) -> anyhow::Result<()> {
     let query = [("db", config.database.as_str()), ("precision", "s")];
     let mut req = client
         .post(&format!("{}/api/v3/write_lp", config.host))

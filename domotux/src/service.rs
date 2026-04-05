@@ -1,22 +1,20 @@
-use std::{collections::HashMap, sync::Arc, usize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::usize;
 
-use axum::{
-    Json,
-    extract::{Query, State, WebSocketUpgrade, ws::WebSocket},
-    http::{self, StatusCode},
-    response::{IntoResponse, Response}, routing::any,
-};
-use mqtt::{
-    self,
-    topics::{PApp, PrixKwhActif},
-};
-use mqtt::QoS;
+use axum::Json;
+use axum::extract::ws::WebSocket;
+use axum::extract::{Query, State, WebSocketUpgrade};
+use axum::http::{self, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::routing::any;
+use mqtt::topics::{PApp, PrixKwhActif};
+use mqtt::{self, QoS};
 use serde::{Deserialize, Serialize};
-use tower_http::{
-    cors::{Any, CorsLayer},
-    trace::{DefaultMakeSpan, TraceLayer},
-};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tower_http::cors::{Any, CorsLayer};
+use tower_http::trace::{DefaultMakeSpan, TraceLayer};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::db;
 
