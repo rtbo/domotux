@@ -1,20 +1,31 @@
 <template>
-  <v-app>
-    <v-main>
-      <router-view />
-    </v-main>
-  </v-app>
+  <v-responsive class="rounded">
+    <v-app>
+      <v-app-bar v-if="showMenu" title="Domotux">
+        <!-- Button on the right for logout -->
+        <v-btn text @click="authStore.logout()">
+          <v-icon>mdi-logout</v-icon>
+        </v-btn>
+      </v-app-bar>
+      <v-main>
+        <router-view />
+      </v-main>
+    </v-app>
+  </v-responsive>
 </template>
 
 <script lang="ts" setup>
   import { computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useRoute } from 'vue-router'
+  import { useAuthStore } from './stores/auth'
 
   const { locale } = useI18n()
 
   const route = useRoute()
-  const showMenu = computed(() => route.name === 'auth')
+  const authStore = useAuthStore()
+
+  const showMenu = computed(() => authStore.isAuthenticated && route.path !== '/login')
 
   onMounted(() => {
     const browserLanguage = navigator.language || (navigator as any).userLanguage
