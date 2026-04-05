@@ -27,8 +27,7 @@ impl Default for Config {
 }
 
 fn default_db_path() -> Option<PathBuf> {
-    let data_dir = dirs::data_dir().map(|dir| dir.join("domotux"))?;
-    Some(data_dir.join("domotux.db"))
+    dirs::data_dir().map(|d| d.join("domotux").join("domotux.db"))
 }
 
 #[derive(Parser)]
@@ -65,6 +64,11 @@ async fn main() -> process::ExitCode {
 }
 
 async fn run(cli: Cli) -> anyhow::Result<()> {
+    if cli.default_config {
+        base::cfg::print_default_config::<Config>()?;
+        return Ok(());
+    }
+
     let mut config: Config = base::cfg::load_config("domotux", None).await?;
 
     match &cli.command {
