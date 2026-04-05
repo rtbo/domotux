@@ -18,15 +18,18 @@ const router = createRouter({
     {
       path: '/',
       component: Index,
+      meta: { title: 'Home' },
     },
     {
       path: '/dashboard',
       component: Dashboard,
+      meta: { title: 'Domotux Dashboard' },
     },
     {
       name: 'Login',
       path: '/login',
       component: Login,
+      meta: { title: 'Domotux Login' },
     },
   ],
 })
@@ -39,6 +42,7 @@ export function loginRedirectFor (to: Pick<RouteLocationNormalizedGeneric, 'full
 }
 
 router.beforeEach(to => {
+  document.title = to.meta.title as string ?? 'Domotux'
   const authStore = useAuthStore()
   if (to.path !== '/login' && !authStore.isAuthenticated) {
     return loginRedirectFor(to)
