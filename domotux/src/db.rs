@@ -14,6 +14,8 @@ impl Db {
         let path_str = path
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid path: {}", path.display()))?;
+        tokio::fs::create_dir_all(path.parent().unwrap()).await?;
+        log::info!("Opening database at {}", path.display());
         let db = turso::Builder::new_local(path_str).build().await?;
         Ok(Self { path, db })
     }
@@ -45,23 +47,26 @@ impl Db {
         .await?;
 
         // verify that the database has been initialized correctly
-        let mut tables = conn
-            .query("SELECT name FROM sqlite_master WHERE type='table'", ())
-            .await?;
-        let mut has_users_table = false;
-        while let Some(row) = tables.next().await? {
-            let table_name = row.get_value(0)?.as_text().map(|s| s.to_string());
-            println!("Found table: {:?}", table_name);
-            if table_name.as_deref() == Some("users") {
-                has_users_table = true;
-                break;
-            }
-        }
-        if !has_users_table {
+        if !self.is_initialized().await? {
             anyhow::bail!("Failed to initialize database schema. 'users' table not found.");
         }
 
         Ok(())
+    }
+
+    pub async fn is_initialized(&self) -> anyhow::Result<bool> {
+        let conn = self.db.connect()?;
+
+        let mut tables = conn
+            .query("SELECT name FROM sqlite_master WHERE type='table'", ())
+            .await?;
+        while let Some(row) = tables.next().await? {
+            let table_name = row.get_value(0)?.as_text().map(|s| s.to_string());
+            if table_name.as_deref() == Some("users") {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     pub async fn create_user(&self, username: &str, password: &str) -> anyhow::Result<()> {
@@ -77,10 +82,7 @@ impl Db {
         // Create the user
         let salt = generate_salt();
         let pwd_hash = hash_password(password, &salt);
-        println!(
-            "Creating user '{}' with password hash {:?} and salt {:?}",
-            username, pwd_hash, salt
-        );
+        log::debug!("Creating user '{}'", username);
         let num = conn
             .execute(
                 "INSERT INTO users (name, pwd, salt) VALUES (?, ?, ?)",
@@ -114,10 +116,7 @@ impl Db {
                 .as_blob()
                 .ok_or_else(|| anyhow::anyhow!("Invalid salt for user {}", username))?;
 
-            println!(
-                "Authenticating user '{}' with password hash {:?} and salt {:?}",
-                username, stored_pwd, salt
-            );
+            log::debug!("Authenticating user '{}'", username);
 
             let input_pwd_hash = hash_password(password, salt);
             Ok(stored_pwd == input_pwd_hash.as_slice())
