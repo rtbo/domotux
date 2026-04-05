@@ -8,9 +8,8 @@
       class="pa-4"
       max-width="400"
       title="Dashboard"
-      href="/dashboard"
-    >
-    </v-card>
+      to="/dashboard"
+    />
   </v-sheet>
 </template>
 
