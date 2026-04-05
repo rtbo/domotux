@@ -3,12 +3,12 @@ import { createI18n } from 'vue-i18n'
 const messages = {
   en: {
     message: {
-      hello: 'hello world',
+      papp: 'Apparent Power',
     },
   },
-  ja: {
+  fr: {
     message: {
-      hello: 'こんにちは、世界',
+      papp: 'Puissance Apparente',
     },
   },
 }
