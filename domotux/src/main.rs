@@ -3,7 +3,7 @@ use std::{
     process,
 };
 
-use base::mqtt::BrokerAddress;
+use mqtt::BrokerAddress;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 

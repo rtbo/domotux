@@ -6,11 +6,11 @@ use axum::{
     http::{self, StatusCode},
     response::{IntoResponse, Response}, routing::any,
 };
-use base::mqtt::{
+use mqtt::{
     self,
     topics::{PApp, PrixKwhActif},
 };
-use rumqttc::v5::mqttbytes::QoS;
+use mqtt::QoS;
 use serde::{Deserialize, Serialize};
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -140,7 +140,7 @@ async fn authenticate_user(
         .unwrap_or_else(|_| internal_server_error())
 }
 
-base::mqtt_subscribe_msg! {
+mqtt::subscribe_msg! {
     enum DashboardMsg {
         PApp(PApp),
         PrixKwhActif(PrixKwhActif),

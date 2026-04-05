@@ -4,6 +4,8 @@ use std::{fmt, str::FromStr};
 pub mod client;
 pub mod topics;
 
+pub use rumqttc::v5::mqttbytes::QoS;
+
 pub trait Topic {
     fn topic() -> &'static str;
 }
@@ -76,6 +78,7 @@ impl<'de> Deserialize<'de> for BrokerAddress {
     }
 }
 
+/// A trait for messages that can be received from MQTT topics.
 pub trait SubscribeMsg {
     /// The list of MQTT topics that this message type can be translated from.
     /// The client will subscribe to these topics and attempt to translate incoming messages
@@ -103,13 +106,13 @@ impl SubscribeMsg for () {
 }
 
 #[macro_export]
-macro_rules! mqtt_subscribe_msg {
+macro_rules! subscribe_msg {
     (@topic [$ty:ty] <= $topic:expr) => {
         $topic
     };
 
     (@topic [$ty:ty]) => {
-        <$ty as $crate::mqtt::Topic>::topic()
+        <$ty as $crate::Topic>::topic()
     };
 
     (enum $name:ident { $($variant:ident($ty:ty) $(<= $topic:expr)?),* $(,)? }) => {
@@ -118,15 +121,15 @@ macro_rules! mqtt_subscribe_msg {
             $($variant($ty)),*
         }
 
-        impl $crate::mqtt::SubscribeMsg for $name {
+        impl $crate::SubscribeMsg for $name {
             fn topics() -> Vec<&'static str> {
-                vec![$($crate::mqtt_subscribe_msg!(@topic [$ty] $(<= $topic)?)),*]
+                vec![$($crate::subscribe_msg!(@topic [$ty] $(<= $topic)?)),*]
             }
 
             fn translate(topic: &str, payload: &[u8]) -> anyhow::Result<Option<Self>> {
-                $(if topic == $crate::mqtt_subscribe_msg!(@topic [$ty] $(<= $topic)?) {
+                $(if topic == $crate::subscribe_msg!(@topic [$ty] $(<= $topic)?) {
                         let msg = serde_json::from_slice::<$ty>(payload)
-                            .map_err(|e| anyhow::anyhow!("Failed to parse MQTT message for topic '{}': {}", $crate::mqtt_subscribe_msg!(@topic [$ty] $(<= $topic)?), e))?;
+                            .map_err(|e| anyhow::anyhow!("Failed to parse MQTT message for topic '{}': {}", $crate::subscribe_msg!(@topic [$ty] $(<= $topic)?), e))?;
                         return Ok(Some(Self::$variant(msg)));
                     })*
 

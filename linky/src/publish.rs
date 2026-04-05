@@ -1,14 +1,14 @@
 use std::{collections::HashMap, time::Duration};
 
-use base::{mqtt::{self, topics::CompteurActif}, vecmap::VecMap};
-use rumqttc::v5::mqttbytes::QoS;
+use base::vecmap::VecMap;
+use mqtt::{QoS, topics::CompteurActif};
 use serde::{Deserialize, Serialize};
 
 use crate::tic;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    broker: base::mqtt::BrokerAddress,
+    broker: mqtt::BrokerAddress,
     compteurs: CompteursConfig,
     contrat: ContratConfig,
 }
@@ -47,7 +47,7 @@ impl Default for Config {
 
 #[derive(Debug)]
 pub struct Client {
-    client: base::mqtt::Client<()>,
+    client: mqtt::Client<()>,
     config: Config,
     meters_map: HashMap<&'static str, &'static str>,
     ptec_map: HashMap<&'static str, &'static str>,
@@ -58,7 +58,7 @@ pub struct Client {
 
 impl Client {
     pub fn new(config: Config) -> Self {
-        let client = base::mqtt::Client::new("linky", config.broker.clone());
+        let client = mqtt::Client::new("linky", config.broker.clone());
 
         let ptec_map = HashMap::from([
             ("TH..", "th"),

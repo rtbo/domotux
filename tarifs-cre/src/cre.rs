@@ -2,10 +2,10 @@
 //! See https://www.data.gouv.fr/datasets/historique-des-tarifs-reglementes-de-vente-delectricite-pour-les-consommateurs-residentiels
 
 use base::{
-    mqtt::topics::{Contrat, PrixKwh},
     vecmap::VecMap,
 };
 use chrono::NaiveDate;
+use mqtt::topics::{Contrat, PrixKwh};
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 
 use crate::tabular;

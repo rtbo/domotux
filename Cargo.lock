@@ -300,11 +300,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dirs",
- "log",
- "rand 0.10.0",
- "rumqttc",
  "serde",
- "serde_json",
  "serde_yml",
  "tokio",
 ]
@@ -869,8 +865,8 @@ dependencies = [
  "hmac",
  "inquire",
  "log",
+ "mqtt",
  "rand 0.10.0",
- "rumqttc",
  "serde",
  "serde_json",
  "serde_yml",
@@ -1823,7 +1819,7 @@ dependencies = [
  "clap",
  "env_logger",
  "log",
- "rumqttc",
+ "mqtt",
  "serde",
  "serde_json",
  "serde_yml",
@@ -2007,6 +2003,20 @@ dependencies = [
  "nix 0.29.0",
  "serialport",
  "winapi",
+]
+
+[[package]]
+name = "mqtt"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base",
+ "log",
+ "rand 0.10.0",
+ "rumqttc",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -3246,8 +3256,8 @@ dependencies = [
  "clap",
  "env_logger",
  "log",
+ "mqtt",
  "reqwest",
- "rumqttc",
  "serde",
  "serde_json",
  "tokio",
@@ -4063,8 +4073,8 @@ dependencies = [
  "clap",
  "env_logger",
  "log",
+ "mqtt",
  "reqwest",
- "rumqttc",
  "serde",
  "serde_json",
  "serde_yml",

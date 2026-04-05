@@ -1,9 +1,10 @@
 [workspace]
 resolver = "3"
-members = ["base", "domotux", "linky", "tarifs-cre", "tools/mig_influx", "wattflux"]
+members = ["base", "domotux", "linky", "mqtt", "tarifs-cre", "tools/mig_influx", "wattflux"]
 
 [workspace.dependencies]
 base = { path = "base" }
+mqtt = { path = "mqtt" }
 
 anyhow = "1.0.102"
 axum = { version = "0.8.8", features = ["macros", "ws"] }

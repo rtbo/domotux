@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::vecmap::VecMap;
+use base::vecmap::VecMap;
 
 use super::Topic;
 

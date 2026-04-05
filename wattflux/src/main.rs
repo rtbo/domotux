@@ -1,6 +1,6 @@
-use base::mqtt::{self, topics::{Compteurs, PApp}};
+use mqtt::{self, topics::{Compteurs, PApp}};
+use mqtt::QoS;
 use clap::Parser;
-use rumqttc::v5::mqttbytes::QoS;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, process, str};
 
@@ -8,7 +8,7 @@ mod influx;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MqttConfig {
-    broker: base::mqtt::BrokerAddress,
+    broker: mqtt::BrokerAddress,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -41,7 +41,7 @@ async fn main() -> process::ExitCode {
     }
 }
 
-base::mqtt_subscribe_msg!{
+mqtt::subscribe_msg!{
     enum Msg {
         PApp(PApp),
         Compteurs(Compteurs),

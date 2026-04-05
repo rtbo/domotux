@@ -5,7 +5,7 @@ use rumqttc::v5::{
 use serde::Serialize;
 use tokio::{sync, task};
 
-use crate::mqtt::Topic;
+use crate::Topic;
 
 use super::{BrokerAddress, SubscribeMsg};
 

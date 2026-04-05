@@ -1,11 +1,11 @@
 use std::{path::PathBuf, process, time::Duration};
 
-use base::mqtt;
-use base::mqtt::topics::CompteurActif;
-use base::mqtt::topics::Contrat;
-use base::mqtt::topics::PrixKwhActif;
+use mqtt;
+use mqtt::topics::CompteurActif;
+use mqtt::topics::Contrat;
+use mqtt::topics::PrixKwhActif;
+use mqtt::QoS;
 use clap::Parser;
-use rumqttc::v5::mqttbytes::QoS;
 use serde::{Deserialize, Serialize};
 
 use crate::cre::fetch_kwh_price;
@@ -15,7 +15,7 @@ mod tabular;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Config {
-    broker: base::mqtt::BrokerAddress,
+    broker: mqtt::BrokerAddress,
     #[serde(
         serialize_with = "base::cfg::serialize_seconds",
         deserialize_with = "base::cfg::deserialize_seconds"
@@ -62,7 +62,7 @@ async fn main() -> process::ExitCode {
     }
 }
 
-base::mqtt_subscribe_msg! {
+mqtt::subscribe_msg! {
     enum Msg {
         Contrat(Contrat),
         CompteurActif(CompteurActif),

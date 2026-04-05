@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 base.workspace = true
+mqtt.workspace = true
 
 anyhow.workspace = true
 axum.workspace = true
@@ -12,7 +13,6 @@ clap.workspace = true
 dirs.workspace = true
 log.workspace = true
 rand.workspace = true
-rumqttc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yml.workspace = true
