@@ -1,0 +1,152 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "'base' unit tests",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=base"
+                ]
+            }
+        },
+        {
+            "name": "'domotux' exe",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=domotux",
+                    "--package=domotux"
+                ]
+            },
+            "args": []
+        },
+        {
+            "name": "'domotux' unit tests",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin=domotux",
+                    "--package=domotux"
+                ]
+            }
+        },
+        {
+            "name": "'mqtt' unit tests",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=mqtt"
+                ]
+            }
+        },
+        {
+            "name": "'linky' exe",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=linky",
+                    "--package=linky"
+                ]
+            },
+            "args": []
+        },
+        {
+            "name": "'linky' unit tests",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin=linky",
+                    "--package=linky"
+                ]
+            }
+        },
+        {
+            "name": "'tarifs-cre' exe",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=tarifs-cre",
+                    "--package=tarifs-cre"
+                ]
+            },
+            "args": []
+        },
+        {
+            "name": "'tarifs-cre' unit tests",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin=tarifs-cre",
+                    "--package=tarifs-cre"
+                ]
+            }
+        },
+        {
+            "name": "'mig_influx' exe",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=mig_influx",
+                    "--package=mig_influx"
+                ]
+            },
+            "args": []
+        },
+        {
+            "name": "'mig_influx' unit tests",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin=mig_influx",
+                    "--package=mig_influx"
+                ]
+            }
+        },
+        {
+            "name": "'wattflux' exe",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=wattflux",
+                    "--package=wattflux"
+                ]
+            },
+            "args": []
+        },
+        {
+            "name": "'wattflux' unit tests",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin=wattflux",
+                    "--package=wattflux"
+                ]
+            }
+        }
+    ]
+}
