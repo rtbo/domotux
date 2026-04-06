@@ -109,7 +109,8 @@ service_dist() {
         if [[ ${service} == "domotux" ]];
         then
                 mkdir -p domotux/dist/facade
-                cp -ru facade/dist/* domotux/dist/facade
+                rm -rf domotux/dist/facade/*
+                cp -r facade/dist/* domotux/dist/facade
         fi
 
         # upload to remote
@@ -158,7 +159,7 @@ service_install() {
                         sudo install -d -o domotux -g domotux /usr/local/share/domotux/facade
                         sudo install -d -o domotux -g domotux /var/lib/domotux
 
-                        sudo cp -ru facade/* /usr/local/share/domotux/facade/
+                        sudo cp -r facade/* /usr/local/share/domotux/facade/
                         sudo chown -R domotux:domotux /usr/local/share/domotux
 
                         sudo chown -R domotux:domotux /var/lib/domotux
