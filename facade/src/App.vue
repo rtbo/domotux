@@ -1,7 +1,7 @@
 <template>
   <v-responsive class="rounded">
     <v-app>
-      <v-app-bar v-if="showMenu" title="Domotux">
+      <v-app-bar v-if="showAppBar" :title="title">
         <!-- Button on the right for logout -->
         <v-btn text @click="authStore.logout()">
           <v-icon>mdi-logout</v-icon>
@@ -25,7 +25,11 @@
   const route = useRoute()
   const authStore = useAuthStore()
 
-  const showMenu = computed(() => authStore.isAuthenticated && route.path !== '/login')
+  const showAppBar = computed(() => authStore.isAuthenticated && route.path !== '/login')
+
+  const title = computed(() =>
+    route.meta.title as string ?? 'Domotux',
+  )
 
   onMounted(() => {
     const browserLanguage = navigator.language || (navigator as any).userLanguage

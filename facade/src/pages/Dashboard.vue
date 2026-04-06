@@ -1,5 +1,4 @@
 <template>
-  <h1 class="text-title-large">Dashboard</h1>
   <v-container>
     <v-row>
       <v-col cols="12" lg="6">
