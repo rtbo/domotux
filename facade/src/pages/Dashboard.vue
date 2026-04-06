@@ -2,7 +2,7 @@
   <h1 class="text-title-large">Dashboard</h1>
   <v-container>
     <v-row>
-      <v-col cols="12" md="6">
+      <v-col cols="12" lg="6">
         <v-card
           class="d-flex fill-height flex-column align-center align-items-center justify-center pa-4"
           elevation="12"
@@ -18,7 +18,7 @@
           />
         </v-card>
       </v-col>
-      <v-col>
+      <v-col cols="12" lg="6">
         <TempoCard
           v-if="contratStore.option === 'tempo'"
           class="fill-height"

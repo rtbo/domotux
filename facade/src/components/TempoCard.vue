@@ -8,10 +8,10 @@
     :title="$t('message.tempoContract')"
   >
     <v-container density="compact">
-      <v-row>
-        <v-col cols="6" md="6">
+      <v-row align="stretch">
+        <v-col class="d-flex" cols="12" sm="6">
           <v-card
-            class="fill-height"
+            class="fill-height flex-grow-1"
             :color="colorAjd"
             :subtitle="$t('message.currently')"
             :title="colorNameAjd"
@@ -23,9 +23,9 @@
             </v-card-text>
           </v-card>
         </v-col>
-        <v-col cols="6" md="6">
+        <v-col class="d-flex" cols="12" sm="6">
           <v-card
-            class="fill-height"
+            class="fill-height flex-grow-1"
             :color="colorDemain"
             :subtitle="$t('message.tomorrow')"
             :title="colorNameDemain"
