@@ -11,6 +11,7 @@ export default defineConfig({
       },
       typography: 'md3',
       elevation: 'md3',
+      exclude: ['grid'],
     }),
   ],
   transformers: [
