@@ -178,10 +178,7 @@ service_start() {
 
         get_service_config
 
-        ssh ${_HST} 'bash -s' <<EOF
-                sudo systemctl start ${service}
-                sudo systemctl enable ${service}
-EOF
+        ssh ${_HST} sudo systemctl enable --now ${service}
 }
 
 service_stop() {
@@ -195,10 +192,7 @@ service_stop() {
 
         get_service_config
 
-        ssh ${_HST} 'bash -s' <<EOF
-                sudo systemctl stop ${service}
-                sudo systemctl disable ${service}
-EOF
+        ssh ${_HST} sudo systemctl disable --now ${service}
 }
 
 service_restart() {
@@ -212,16 +206,7 @@ service_restart() {
 
         get_service_config
 
-        ssh ${_HST} 'bash -s' <<EOF
-                cd ${_DST}
-                if [[ ! -f ${service}.service || ! -f ${service} ]];
-                then
-                        echo -e "\e[1;31mService files not found in ${_DST}, please upload the service first\e[0m" >&2
-                        exit 1
-                fi
-
-                sudo systemctl restart ${service}
-EOF
+        ssh ${_HST} sudo systemctl restart ${service}
 }
 
 service_status() {
@@ -238,16 +223,7 @@ service_status() {
 
         get_service_config
 
-        ssh ${_HST} 'bash -s' <<EOF
-                cd ${_DST}
-                if [[ ! -f ${service}.service || ! -f ${service} ]];
-                then
-                        echo -e "\e[1;31mService files not found in ${_DST}, please upload the service first\e[0m" >&2
-                        exit 1
-                fi
-
-                sudo systemctl status ${service}
-EOF
+        ssh ${_HST} sudo systemctl status ${service}
 }
 
 prog=$0
