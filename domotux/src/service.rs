@@ -10,12 +10,14 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
 use base::vecmap::VecMap;
 use mqtt::topics::{
-    CompteurActif, Contrat, CouleurTempo, CouleurTempoAujourdhui, CouleurTempoDemain, PApp, PrixKwh, PrixKwhActif
+    CompteurActif, Contrat, CouleurTempo, CouleurTempoAujourdhui, CouleurTempoDemain, PApp,
+    PrixKwh, PrixKwhActif,
 };
 use mqtt::{self, QoS};
 use serde::{Deserialize, Serialize};
 use tokio::{sync, task};
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -57,7 +59,7 @@ pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let db = db::Db::open(config.db_path.clone()).await?;
+    let db = super::find_and_open_db().await?;
     if !db.is_initialized().await? {
         log::error!("Database not initialized, please run `domotux initialize` first");
     }
@@ -73,12 +75,14 @@ pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
 
     mqtt_loop(state.clone());
 
+    let facade_dir = "/usr/local/share/domotux/facade";
+    let serve_facade = tokio::fs::metadata(facade_dir).await.is_ok();
+
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods([http::Method::GET, http::Method::POST])
         .allow_headers([http::header::CONTENT_TYPE, http::header::AUTHORIZATION]);
 
-    // build our application with a single route
     let app = axum::Router::new()
         .route("/v1/auth", post(authenticate_user))
         .route("/v1/papp_ws", any(papp_ws))
@@ -89,6 +93,18 @@ pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),
         )
         .with_state(state);
+
+    let app = if serve_facade {
+        log::info!("Serving facade from {}", facade_dir);
+        let facade_index = format!("{facade_dir}/index.html");
+        app.fallback_service(
+            ServeDir::new(facade_dir)
+                .append_index_html_on_directories(true)
+                .fallback(ServeFile::new(facade_index)),
+        )
+    } else {
+        app
+    };
 
     log::info!("Starting Domotux service on {}", config.bind_addr);
 

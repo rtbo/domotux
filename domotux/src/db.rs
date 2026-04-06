@@ -1,23 +1,29 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use rand::RngExt;
 use sha2::Digest;
 
 #[derive(Debug)]
 pub struct Db {
-    path: PathBuf,
     db: turso::Database,
 }
 
 impl Db {
-    pub async fn open(path: PathBuf) -> anyhow::Result<Self> {
+    pub async fn open(path: &Path) -> anyhow::Result<Self> {
         let path_str = path
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid path: {}", path.display()))?;
-        tokio::fs::create_dir_all(path.parent().unwrap()).await?;
+
+        let parent_dir = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("Invalid path: {}", path.display()))?;
+        tokio::fs::create_dir_all(parent_dir).await?;
+
         log::info!("Opening database at {}", path.display());
         let db = turso::Builder::new_local(path_str).build().await?;
-        Ok(Self { path, db })
+        Ok(Self {
+            db,
+        })
     }
 
     pub async fn initialize(&self) -> anyhow::Result<()> {
@@ -31,8 +37,7 @@ impl Db {
             .await?;
         if tables.next().await?.is_some() {
             anyhow::bail!(
-                "Database already contains a schema. Delete {} before reinitializing.",
-                self.path.display()
+                "Database already contains a schema. Delete Database before reinitializing.",
             );
         }
 

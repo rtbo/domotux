@@ -3,6 +3,8 @@ Description=Linky Service
 After=network.target
 
 [Service]
+User=domotux
+Group=domotux
 ExecStart=linky
 Restart=always
 Environment="RUST_LOG=info"

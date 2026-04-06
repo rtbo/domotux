@@ -1,13 +1,12 @@
 [Unit]
-Description=Tarifs CRE
+Description=Domotux Service
 After=network.target
 
 [Service]
 User=domotux
 Group=domotux
-ExecStart=tarifs-cre
+ExecStart=domotux
 Restart=always
-Environment="RUST_LOG=info"
 
 [Install]
 WantedBy=multi-user.target

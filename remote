@@ -31,7 +31,7 @@ open_shell() {
         ssh ${_HST} -t "cd ${_DST} ; bash --login"
 }
 
-clean_service() {
+service_clean() {
         if [[ -z ${service} ]];
         then
                 echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
@@ -43,7 +43,7 @@ clean_service() {
         rm -rf ${service}/dist
 }
 
-compile_service() {
+service_compile() {
         if [[ -z ${service} ]];
         then
                 echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
@@ -60,9 +60,17 @@ compile_service() {
                 echo -e "Cross compiling service \e[1;32m${service}\e[0m for target \e[1;32m${_TGT}\e[0m"
                 cargo cross build --target ${_TGT} --release --package ${service}
         fi
+
+        if [[ ${service} == "domotux" ]];
+        then
+                echo -e "Compiling frontend assets for \e[1;32mdomotux\e[0m"
+                pushd ${DIR}/facade > /dev/null
+                pnpm build
+                popd > /dev/null
+        fi
 }
 
-dist_service() {
+service_dist() {
         if [[ -z ${service} ]];
         then
                 echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
@@ -98,11 +106,18 @@ dist_service() {
                 cp -u ${service}/${service}.yml ${service}/dist/
         fi
 
+        if [[ ${service} == "domotux" ]];
+        then
+                mkdir -p domotux/dist/facade
+                cp -ru facade/dist/* domotux/dist/facade
+        fi
+
         # upload to remote
-        rsync -va  ${service}/dist/ ${_HST}:${_DST}
+        ssh ${_HST} "mkdir -p ${_DST}/${service}"
+        rsync -va  ${service}/dist/ ${_HST}:${_DST}/${service}
 }
 
-install_service() {
+service_install() {
         if [[ -z ${service} ]];
         then
                 echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
@@ -114,26 +129,45 @@ install_service() {
         get_service_config
 
         ssh ${_HST} 'bash -s' <<EOF
-                cd ${_DST}
+                cd ${_DST}/${service}
                 if [[ ! -f ${service}.service || ! -f ${service} ]];
                 then
                         echo -e "\e[1;31mService files not found in ${_DST}, please upload the service first\e[0m" >&2
                         exit 1
                 fi
 
+                # Create domotux user and group if not exists
+                # id -u domotux &>/dev/null || sudo useradd -r -M -s /usr/sbin/nologin domotux
+
+                # Install service binary and systemd unit file, and optionally config file
                 sudo install ${service} /usr/local/bin/${service}
                 sudo install ${service}.service /etc/systemd/system/${service}.service
+                sudo systemctl daemon-reload
                 if [[ -f ${service}.yml ]];
                 then
                         sudo install ${service}.yml /etc/${service}.yml
                 else
                         sudo rm -f /etc/${service}.yml
                 fi
-                sudo systemctl daemon-reload
+
+                # For domotux, also install frontend assets and set proper ownership and permissions
+                if [[ ${service} == "domotux" ]];
+                then
+                        sudo rm -rf /usr/local/share/domotux
+
+                        sudo install -d -o domotux -g domotux /usr/local/share/domotux/facade
+                        sudo install -d -o domotux -g domotux /var/lib/domotux
+
+                        sudo cp -ru facade/* /usr/local/share/domotux/facade/
+                        sudo chown -R domotux:domotux /usr/local/share/domotux
+
+                        sudo chown -R domotux:domotux /var/lib/domotux
+                        sudo chmod -R 770 /var/lib/domotux
+                fi
 EOF
 }
 
-start_service() {
+service_start() {
         if [[ -z ${service} ]];
         then
                 echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
@@ -145,19 +179,12 @@ start_service() {
         get_service_config
 
         ssh ${_HST} 'bash -s' <<EOF
-                cd ${_DST}
-                if [[ ! -f ${service}.service || ! -f ${service} ]];
-                then
-                        echo -e "\e[1;31mService files not found in ${_DST}, please upload the service first\e[0m" >&2
-                        exit 1
-                fi
-
                 sudo systemctl start ${service}
                 sudo systemctl enable ${service}
 EOF
 }
 
-stop_service() {
+service_stop() {
         if [[ -z ${service} ]];
         then
                 echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
@@ -169,19 +196,12 @@ stop_service() {
         get_service_config
 
         ssh ${_HST} 'bash -s' <<EOF
-                cd ${_DST}
-                if [[ ! -f ${service}.service || ! -f ${service} ]];
-                then
-                        echo -e "\e[1;31mService files not found in ${_DST}, please upload the service first\e[0m" >&2
-                        exit 1
-                fi
-
                 sudo systemctl stop ${service}
                 sudo systemctl disable ${service}
 EOF
 }
 
-restart_service() {
+service_restart() {
         if [[ -z ${service} ]];
         then
                 echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
@@ -233,7 +253,31 @@ EOF
 prog=$0
 
 service=
-known_services=(linky wattflux tarifs-cre)
+all_services=(linky wattflux tarifs-cre domotux)
+service_specifiers=(all ${all_services[*]})
+
+call_func() {
+        local func=$1
+        shift
+        if [[ -z ${service} ]];
+        then
+                echo -e "\e[1;31mService must be specified as first argument\e[0m" >&2
+                exit 1
+        fi
+
+        if [[ ${service} == "all" ]];
+        then
+                for s in ${all_services[*]};
+                do
+                        service=$s
+                        ${func} "$@"
+                done
+        else
+                ${func} "$@"
+        fi
+}
+
+pushd ${DIR} > /dev/null
 
 while [ $# -gt 0 ]
 do
@@ -242,37 +286,37 @@ do
                         open_shell
                         ;;
                 clean)
-                        clean_service
+                        call_func service_clean
                         ;;
                 compile)
-                        compile_service
+                        call_func service_compile
                         ;;
                 dist)
-                        dist_service
+                        call_func service_dist
                         ;;
                 install)
-                        install_service
+                        call_func service_install
                         ;;
                 start)
-                        start_service
+                        call_func service_start
                         ;;
                 stop)
-                        stop_service
+                        call_func service_stop
                         ;;
                 restart)
-                        restart_service
+                        call_func service_restart
                         ;;
                 status)
-                        service_status
+                        call_func service_status
                         ;;
                 *)
-                        if [[ " ${known_services[*]} " =~ " ${1} " ]];
+                        if [[ " ${service_specifiers[*]} " =~ " ${1} " ]];
                         then
                                 service=$1
                         else
                                 echo -e "\e[1;31mUnknown service or command: $1\e[0m" >&2
                                 echo "Usage: ${prog} [service] [command]" >&2
-                                echo "Available services: ${known_services[*]}"
+                                echo "Available services: ${service_specifiers[*]}"
                                 echo "Available commands: ssh compile dist clean" >&2
                                 exit 1
                         fi
@@ -280,3 +324,5 @@ do
         esac
         shift
 done
+
+popd > /dev/null

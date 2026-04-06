@@ -11,23 +11,16 @@ mod service;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Config {
     broker: BrokerAddress,
-    db_path: PathBuf,
     bind_addr: String,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        let db_path = default_db_path().expect("Could not determine config directory");
         Self {
             broker: BrokerAddress::default(),
-            db_path,
             bind_addr: "0.0.0.0:3030".to_string(),
         }
     }
-}
-
-fn default_db_path() -> Option<PathBuf> {
-    dirs::data_dir().map(|d| d.join("domotux").join("domotux.db"))
 }
 
 #[derive(Parser)]
@@ -44,7 +37,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    Initialize { db_path: Option<PathBuf> },
+    LocateDb,
+    Initialize,
     CreateUser,
 }
 
@@ -72,11 +66,21 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
     let mut config: Config = base::cfg::load_config("domotux", None).await?;
 
     match &cli.command {
-        Some(Command::Initialize { db_path }) => {
-            initialize(&mut config, db_path.as_deref()).await?;
+        Some(Command::Initialize) => {
+            initialize().await?;
         }
         Some(Command::CreateUser) => {
-            create_user(&config.db_path).await?;
+            create_user().await?;
+        }
+        Some(Command::LocateDb) => {
+            for db_path in possible_db_paths() {
+                if db_path.exists() {
+                    println!("Database found at {}", db_path.display());
+                    break;
+                } else {
+                    println!("No database found at {}", db_path.display());
+                }
+            }
         }
         None => {
             if let Some(broker) = cli.broker {
@@ -88,42 +92,62 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn initialize(config: &mut Config, db_path_cli: Option<&Path>) -> anyhow::Result<()> {
-    let update_config_path = db_path_cli.is_some();
-    let db_path = db_path_cli
-        .as_deref()
-        .unwrap_or(&config.db_path)
-        .to_path_buf();
+fn possible_db_paths() -> Vec<PathBuf> {
+    let mut paths = vec![PathBuf::from("/var/lib/domotux/domotux.db")];
+    if let Some(home_db_path) = dirs::data_dir().map(|d| d.join("domotux/domotux.db")) {
+        paths.push(home_db_path);
+    }
+    paths
+}
+
+async fn initialize() -> anyhow::Result<()> {
+    for db_path in possible_db_paths() {
+        if let Err(e) = try_initialize(&db_path).await {
+            eprintln!("Failed to initialize database at {}: {}", db_path.display(), e);
+        } else {
+            return Ok(());
+        }
+    }
+
+    anyhow::bail!("Failed to initialize database at all attempted paths.");
+}
+
+async fn try_initialize(db_path: &Path) -> anyhow::Result<()> {
     let parent = db_path
         .parent()
         .ok_or_else(|| anyhow::anyhow!("Invalid database path: {}", db_path.display()))?;
     tokio::fs::create_dir_all(parent).await?;
-    let db = db::Db::open(db_path.clone()).await?;
+
+    let db = db::Db::open(&db_path).await?;
 
     db.initialize().await?;
 
-    if update_config_path {
-        println!(
-            "Updating config file with new database path: {}",
-            db_path.display()
-        );
-        config.db_path = db_path.clone();
-        base::cfg::save_config("domotux", &config, None).await?;
-    }
     println!("Database initialized successfully at {}", db_path.display());
     println!("You can now create a user with the 'create-user' command.");
 
     Ok(())
 }
 
-async fn create_user(db_path: &Path) -> anyhow::Result<()> {
+async fn find_and_open_db() -> anyhow::Result<db::Db> {
+    for db_path in possible_db_paths() {
+        match db::Db::open(&db_path).await {
+            Ok(db) => return Ok(db),
+            Err(e) => eprintln!("Failed to open database at {}: {}", db_path.display(), e),
+        }
+    }
+
+    anyhow::bail!("Failed to open database at all attempted paths.");
+}
+
+async fn create_user() -> anyhow::Result<()> {
+    let db = find_and_open_db().await?;
+
     let username = inquire::Text::new("Username:").prompt()?;
     validate_username(&username)?;
 
     let password = inquire::Password::new("Password:").prompt()?;
     validate_password(&password)?;
 
-    let db = db::Db::open(db_path.to_path_buf()).await?;
     db.create_user(&username, &password).await?;
     println!("User '{}' created successfully.", username);
     Ok(())
