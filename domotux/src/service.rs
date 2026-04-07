@@ -321,10 +321,10 @@ async fn get_info_contrat(
         res.prix_kwh = Some(prix_kwh.0.clone());
     }
     if let Some(couleur_ajd) = mqtt_state.couleur_ajd.as_ref() {
-        res.couleur_ajd = Some(couleur_ajd.0);
+        res.couleur_ajd = couleur_ajd.0;
     }
     if let Some(couleur_demain) = mqtt_state.couleur_demain.as_ref() {
-        res.couleur_demain = Some(couleur_demain.0);
+        res.couleur_demain = couleur_demain.0;
     }
     Ok(Json(res))
 }

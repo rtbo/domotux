@@ -46,7 +46,7 @@ impl FromStr for CouleurTempo {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct CouleurTempoAujourdhui(pub CouleurTempo);
+pub struct CouleurTempoAujourdhui(pub Option<CouleurTempo>);
 
 
 impl Topic for CouleurTempoAujourdhui {
@@ -56,7 +56,7 @@ impl Topic for CouleurTempoAujourdhui {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct CouleurTempoDemain(pub CouleurTempo);
+pub struct CouleurTempoDemain(pub Option<CouleurTempo>);
 
 
 impl Topic for CouleurTempoDemain {

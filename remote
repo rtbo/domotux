@@ -230,7 +230,7 @@ service_status() {
 prog=$0
 
 service=
-all_services=(linky wattflux tarifs-cre domotux)
+all_services=(linky wattflux tarifs-cre couleur-tempo domotux)
 service_specifiers=(all ${all_services[*]})
 
 call_func() {
@@ -249,6 +249,7 @@ call_func() {
                         service=$s
                         ${func} "$@"
                 done
+                service=all
         else
                 ${func} "$@"
         fi

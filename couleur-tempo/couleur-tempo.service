@@ -1,0 +1,13 @@
+[Unit]
+Description=Couleur Tempo Service
+After=network.target
+
+[Service]
+User=domotux
+Group=domotux
+ExecStart=couleur-tempo
+Restart=always
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

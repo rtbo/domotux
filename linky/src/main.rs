@@ -12,14 +12,14 @@ mod tic;
 #[derive(Debug, Serialize, Deserialize)]
 struct Config {
     tic: tic::Config,
-    mqtt: publish::Config,
+    publish: publish::Config,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             tic: tic::Config::default(),
-            mqtt: publish::Config::default(),
+            publish: publish::Config::default(),
         }
     }
 }
@@ -56,7 +56,7 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
     let config: Config = base::cfg::load_config("linky", cli.config_file).await?;
     let Config {
         tic: tic_cfg,
-        mqtt: publish_cfg,
+        publish: publish_cfg,
     } = config;
 
     let mut mqtt_client = publish::Client::new(publish_cfg);

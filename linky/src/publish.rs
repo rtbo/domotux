@@ -14,6 +14,7 @@ pub struct Config {
     broker: mqtt::BrokerAddress,
     compteurs: CompteursConfig,
     contrat: ContratConfig,
+    tempo: TempoConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +35,12 @@ struct ContratConfig {
     min_interval: Duration,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TempoConfig {
+    skip_aujourdhui: bool,
+    skip_demain: bool,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -43,6 +50,10 @@ impl Default for Config {
             },
             contrat: ContratConfig {
                 min_interval: Duration::from_hours(24),
+            },
+            tempo: TempoConfig {
+                skip_aujourdhui: true,
+                skip_demain: true,
             },
         }
     }
@@ -112,7 +123,9 @@ impl Client {
     pub async fn publish(&mut self, tic_frame: Vec<(String, tic::Value)>) -> anyhow::Result<()> {
         self.publish_papp(&tic_frame).await?;
         self.publish_compteurs(&tic_frame).await?;
-        self.publish_demain(&tic_frame).await?;
+        if !self.config.tempo.skip_demain {
+            self.publish_demain(&tic_frame).await?;
+        }
         self.publish_contrat(&tic_frame).await?;
 
         Ok(())
@@ -193,13 +206,14 @@ impl Client {
                 .publish(&CompteurActif(active.clone()), QoS::AtLeastOnce, true)
                 .await?;
 
-            let couleur_tempo = match active.as_str() {
-                "bleuHp" | "bleuHc" => Some(CouleurTempo::Bleu),
-                "blancHp" | "blancHc" => Some(CouleurTempo::Blanc),
-                "rougeHp" | "rougeHc" => Some(CouleurTempo::Rouge),
-                _ => None,
-            };
-            if let Some(couleur_tempo) = couleur_tempo {
+            if !self.config.tempo.skip_aujourdhui {
+                let couleur_tempo = match active.as_str() {
+                    "bleuHp" | "bleuHc" => Some(CouleurTempo::Bleu),
+                    "blancHp" | "blancHc" => Some(CouleurTempo::Blanc),
+                    "rougeHp" | "rougeHc" => Some(CouleurTempo::Rouge),
+                    _ => None,
+                };
+
                 self.client
                     .publish(
                         &CouleurTempoAujourdhui(couleur_tempo),
@@ -238,15 +252,13 @@ impl Client {
                 "ROUG" => Some(CouleurTempo::Rouge),
                 _ => None,
             };
-            if let Some(couleur_tempo) = couleur_tempo {
-                self.client
-                    .publish(
-                        &mqtt::topics::CouleurTempoDemain(couleur_tempo),
-                        QoS::AtLeastOnce,
-                        true,
-                    )
-                    .await?;
-            }
+            self.client
+                .publish(
+                    &mqtt::topics::CouleurTempoDemain(couleur_tempo),
+                    QoS::AtLeastOnce,
+                    true,
+                )
+                .await?;
         }
         Ok(())
     }
