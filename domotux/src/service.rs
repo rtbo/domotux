@@ -85,6 +85,7 @@ pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
 
     let app = axum::Router::new()
         .route("/v1/auth", post(authenticate_user))
+        .route("/v1/check_auth", get(check_auth))
         .route("/v1/papp_ws", any(papp_ws))
         .route("/v1/info_contrat", get(get_info_contrat))
         .layer(cors)
@@ -233,6 +234,10 @@ async fn authenticate_user(
     jwt::generate_jwt(&claims, &state.secret_key)
         .map(|token| (StatusCode::OK, token))
         .unwrap_or_else(|_| internal_server_error())
+}
+
+async fn check_auth(_: JwtVerifier<JwtClaims>) -> (StatusCode, &'static str) {
+    (StatusCode::OK, "Authenticated")
 }
 
 mqtt::subscribe_msg! {

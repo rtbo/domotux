@@ -25,3 +25,22 @@ export async function authUser (name: string, password: string): Promise<string>
   }
   return await resp.text()
 }
+
+export async function checkAuth (token: string): Promise<boolean> {
+  const resp = await fetch(restUrl('/check_auth'), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  if (resp.status === 401) {
+    return false
+  }
+
+  if (!resp.ok) {
+    throw new Error(`Authentication check failed: ${resp.statusText}`)
+  }
+
+  return true
+}

@@ -163,6 +163,7 @@ service_install() {
                         sudo chown -R domotux:domotux /usr/local/share/domotux
 
                         sudo chown -R domotux:domotux /var/lib/domotux
+                        sudo su domotux -c "domotux initialize"
                         sudo chmod -R 770 /var/lib/domotux
                 fi
 EOF

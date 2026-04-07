@@ -44,9 +44,12 @@ export function loginRedirectFor (to: Pick<RouteLocationNormalizedGeneric, 'full
 router.beforeEach(to => {
   document.title = to.meta.title as string ?? 'Domotux'
   const authStore = useAuthStore()
-  if (to.path !== '/login' && !authStore.isAuthenticated) {
-    return loginRedirectFor(to)
-  }
+
+  return authStore.initialize().then(() => {
+    if (to.path !== '/login' && !authStore.isAuthenticated) {
+      return loginRedirectFor(to)
+    }
+  })
 })
 
 export default router
