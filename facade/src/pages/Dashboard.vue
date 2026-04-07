@@ -23,6 +23,7 @@
           class="fill-height"
           :compteur-actif="contratStore.compteurActif"
           :couleur-demain="contratStore.couleurDemain"
+          :prix-kwh="contratStore.prixKwh"
           :prix-kwh-actif="contratStore.prixKwhActif"
           :subsc-kva="contratStore.subscKva"
         />

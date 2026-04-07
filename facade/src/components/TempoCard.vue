@@ -13,8 +13,8 @@
           <v-card
             class="fill-height flex-grow-1"
             :color="colorAjd"
-            :subtitle="$t('message.currently')"
-            :title="colorNameAjd"
+            :subtitle="colorNameAjd"
+            :title="$t('message.currently')"
             variant="flat"
           >
             <v-card-text>
@@ -27,8 +27,8 @@
           <v-card
             class="fill-height flex-grow-1"
             :color="colorDemain"
-            :subtitle="$t('message.tomorrow')"
-            :title="colorNameDemain"
+            :subtitle="colorNameDemain"
+            :title="$t('message.tomorrow')"
             variant="flat"
           >
             <v-card-text v-if="props.couleurDemain">
