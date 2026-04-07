@@ -18,7 +18,7 @@ const router = createRouter({
     {
       path: '/',
       component: Index,
-      meta: { title: 'Home' },
+      meta: { title: 'Domotux' },
     },
     {
       path: '/dashboard',

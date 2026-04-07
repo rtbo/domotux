@@ -1,5 +1,4 @@
 <template>
-  <h1>Domotux</h1>
   <v-sheet
     class="d-flex align-center justify-center"
     height="100%"
