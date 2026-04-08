@@ -4,8 +4,8 @@ use std::usize;
 
 use axum::Json;
 use axum::extract::ws::WebSocket;
-use axum::extract::{Query, State, WebSocketUpgrade};
-use axum::http::{self, StatusCode};
+use axum::extract::{FromRequestParts, Query, State, WebSocketUpgrade};
+use axum::http::{self, StatusCode, request};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
 use base::vecmap::VecMap;
@@ -23,7 +23,6 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::db;
-use crate::service::jwt::JwtVerifier;
 
 mod jwt;
 
@@ -183,23 +182,17 @@ fn mqtt_loop(state: Arc<AppState>) -> task::JoinHandle<()> {
     })
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct JwtClaims {
-    sub: String,
-    exp: usize,
-}
-
-#[derive(Debug, Deserialize)]
-struct AuthRequest {
-    name: String,
-    password: String,
-}
-
 fn internal_server_error() -> (StatusCode, String) {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
         "Internal server error".to_string(),
     )
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct JwtClaims {
+    sub: String,
+    exp: u64,
 }
 
 #[axum::debug_handler]
@@ -227,16 +220,64 @@ async fn authenticate_user(
         exp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_secs() as usize
+            .as_secs()
             + 1800, // 30 minutes expiration
     };
 
-    jwt::generate_jwt(&claims, &state.secret_key)
+    jwt::generate(&claims, &state.secret_key)
         .map(|token| (StatusCode::OK, token))
         .unwrap_or_else(|_| internal_server_error())
 }
 
-async fn check_auth(_: JwtVerifier<JwtClaims>) -> (StatusCode, &'static str) {
+#[allow(dead_code)]
+struct JwtAuth(JwtClaims);
+
+impl FromRequestParts<Arc<AppState>> for JwtAuth {
+    type Rejection = (StatusCode, &'static str);
+
+    async fn from_request_parts(
+        parts: &mut request::Parts,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        let token = {
+            let auth_header = parts
+                .headers
+                .get(axum::http::header::AUTHORIZATION)
+                .and_then(|h| h.to_str().ok())
+                .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Missing Authorization header"))?;
+            if !auth_header.starts_with("Bearer ") {
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    "Invalid Authorization header format",
+                ));
+            }
+            &auth_header[7..]
+        };
+
+        let claims: JwtClaims = match jwt::verify(token, &state.secret_key) {
+            Ok(claims) => claims,
+            Err(_) => return Err((StatusCode::UNAUTHORIZED, "Invalid or expired token")),
+        };
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        if now > claims.exp {
+            return Err((StatusCode::UNAUTHORIZED, "Token has expired"));
+        }
+
+        Ok(JwtAuth(claims))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct AuthRequest {
+    name: String,
+    password: String,
+}
+
+async fn check_auth(_: JwtAuth) -> (StatusCode, &'static str) {
     (StatusCode::OK, "Authenticated")
 }
 
@@ -254,11 +295,11 @@ async fn papp_ws(
 ) -> Response {
     log::info!("PApp WebSocket connection attempt");
 
-    let user = if let Some(token) = query.get("token") {
-        match jwt::verify_jwt::<JwtClaims>(token, &state.secret_key) {
-            Ok(claims) => claims.sub,
+    let claims = if let Some(token) = query.get("token") {
+        match jwt::verify::<JwtClaims>(token, &state.secret_key) {
+            Ok(claims) => claims,
             Err(_) => {
-                log::warn!("Invalid token provided for Dashboard WebSocket connection");
+                log::warn!("Invalid token provided for PApp WebSocket connection");
                 return (StatusCode::UNAUTHORIZED, "Invalid token".to_string()).into_response();
             }
         }
@@ -266,6 +307,17 @@ async fn papp_ws(
         log::warn!("Missing token for PApp WebSocket connection");
         return (StatusCode::BAD_REQUEST, "Missing token".to_string()).into_response();
     };
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    if now > claims.exp {
+        log::warn!("Expired token provided for PApp WebSocket connection");
+        return (StatusCode::UNAUTHORIZED, "Token has expired".to_string()).into_response();
+    }
+
+    let user = claims.sub;
 
     log::info!("User '{}' authenticated successfully", user);
 
@@ -308,7 +360,7 @@ struct InfoContrat {
 
 async fn get_info_contrat(
     State(state): State<Arc<AppState>>,
-    _: JwtVerifier<JwtClaims>,
+    _: JwtAuth,
 ) -> Result<Json<InfoContrat>, (StatusCode, &'static str)> {
     let mqtt_state = state.mqtt.lock().await;
     let mut res = InfoContrat::default();

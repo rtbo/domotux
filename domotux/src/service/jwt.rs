@@ -1,15 +1,9 @@
-use std::sync::Arc;
 
-use axum::{
-    extract::FromRequestParts,
-    http::{StatusCode, request},
-};
 use base64::prelude::*;
 use hmac::{Hmac, Mac};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
-use crate::service::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Header {
@@ -35,7 +29,7 @@ fn sign(unsigned_token: &str, secret_key: &str) -> anyhow::Result<String> {
     Ok(BASE64_URL_SAFE_NO_PAD.encode(&signature))
 }
 
-pub fn generate_jwt<C>(claims: C, secret_key: &str) -> anyhow::Result<String>
+pub fn generate<C>(claims: C, secret_key: &str) -> anyhow::Result<String>
 where
     C: Serialize,
 {
@@ -51,7 +45,7 @@ where
     Ok(token)
 }
 
-pub fn verify_jwt<C>(token: &str, secret_key: &str) -> anyhow::Result<C>
+pub fn verify<C>(token: &str, secret_key: &str) -> anyhow::Result<C>
 where
     C: for<'de> Deserialize<'de>,
 {
@@ -81,38 +75,4 @@ where
 
     let claims: C = from_json_base64(claims)?;
     Ok(claims)
-}
-
-pub struct JwtVerifier<C>(pub C);
-
-impl<C> FromRequestParts<Arc<AppState>> for JwtVerifier<C>
-where
-    C: DeserializeOwned + Send,
-{
-    type Rejection = (StatusCode, &'static str);
-
-    async fn from_request_parts(
-        parts: &mut request::Parts,
-        state: &Arc<AppState>,
-    ) -> Result<Self, Self::Rejection> {
-        let token = {
-            let auth_header = parts
-                .headers
-                .get(axum::http::header::AUTHORIZATION)
-                .and_then(|h| h.to_str().ok())
-                .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Missing Authorization header"))?;
-            if !auth_header.starts_with("Bearer ") {
-                return Err((
-                    StatusCode::UNAUTHORIZED,
-                    "Invalid Authorization header format",
-                ));
-            }
-            &auth_header[7..]
-        };
-
-        match verify_jwt::<C>(token, &state.secret_key) {
-            Ok(claims) => Ok(JwtVerifier(claims)),
-            Err(_) => Err((StatusCode::UNAUTHORIZED, "Invalid or expired token")),
-        }
-    }
 }
