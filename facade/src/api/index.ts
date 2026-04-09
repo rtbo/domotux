@@ -1,15 +1,16 @@
 const serverHost = import.meta.env.VITE_API_SERVER_HOST || 'localhost:3030'
+const useTls = import.meta.env.VITE_API_USE_TLS === 'true'
 
 export function makeUrl (protocol: string, path: string): string {
   return `${protocol}://${serverHost}/v1${path}`
 }
 
 export function restUrl (path: string): string {
-  return makeUrl('http', path)
+  return makeUrl(useTls ? 'https' : 'http', path)
 }
 
 export function wsUrl (path: string): string {
-  return makeUrl('ws', path)
+  return makeUrl(useTls ? 'wss' : 'ws', path)
 }
 
 export async function authUser (name: string, password: string): Promise<string> {

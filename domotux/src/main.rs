@@ -2,23 +2,30 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use clap::{Parser, Subcommand};
-use mqtt::BrokerAddress;
 use serde::{Deserialize, Serialize};
 
 mod db;
 mod service;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Config {
-    broker: BrokerAddress,
+pub struct Config {
+    broker: mqtt::BrokerAddress,
     bind_addr: String,
+    tls: Option<TlsConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TlsConfig {
+    cert_path: String,
+    key_path: String,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            broker: BrokerAddress::default(),
+            broker: Default::default(),
             bind_addr: "0.0.0.0:3030".to_string(),
+            tls: None,
         }
     }
 }

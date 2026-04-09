@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::usize;
 
@@ -8,6 +9,7 @@ use axum::extract::{FromRequestParts, Query, State, WebSocketUpgrade};
 use axum::http::{self, StatusCode, request};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
+use axum_server::tls_rustls::RustlsConfig;
 use base::vecmap::VecMap;
 use mqtt::topics::{
     CompteurActif, Contrat, CouleurTempo, CouleurTempoAujourdhui, CouleurTempoDemain, PApp,
@@ -106,13 +108,19 @@ pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
         app
     };
 
+    let addr: SocketAddr = config.bind_addr.parse()?;
     log::info!("Starting Domotux service on {}", config.bind_addr);
 
-    // run our app with hyper, listening globally on port 3000
-    let listener = tokio::net::TcpListener::bind(&config.bind_addr)
-        .await
-        .unwrap();
-    axum::serve(listener, app).await.unwrap();
+    if let Some(tls) = &config.tls {
+        let tls_config = RustlsConfig::from_pem_file(&tls.cert_path, &tls.key_path).await?;
+
+        axum_server::bind_rustls(addr, tls_config)
+            .serve(app.into_make_service())
+            .await?;
+    } else {
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        axum::serve(listener, app).await.unwrap();
+    }
 
     Ok(())
 }
