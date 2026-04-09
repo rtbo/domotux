@@ -17,7 +17,7 @@ use mqtt::topics::{
 };
 use mqtt::{self, QoS};
 use serde::{Deserialize, Serialize};
-use tokio::{sync, task};
+use tokio::{sync, task, time};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
@@ -163,29 +163,48 @@ mqtt::subscribe_msg! {
 }
 
 fn mqtt_loop(state: Arc<AppState>) -> task::JoinHandle<()> {
-    let mut client = mqtt::Client::<MqttMsg>::new("domotux_service", state.broker.clone());
     tokio::spawn(async move {
-        client.subscribe_all(QoS::AtLeastOnce).await.unwrap();
         loop {
-            if let Some(msg) = client.recv().await {
-                let mut mqtt_state = state.mqtt.lock().await;
-                match msg {
-                    MqttMsg::Contrat(contrat) => mqtt_state.contrat = Some(contrat),
-                    MqttMsg::CompteurActif(compteur_actif) => {
-                        mqtt_state.compteur_actif = Some(compteur_actif)
+            let mut client = mqtt::Client::<MqttMsg>::new("domotux_service", state.broker.clone());
+
+            if let Err(e) = client.subscribe_all(QoS::AtLeastOnce).await {
+                log::error!("Failed to subscribe to MQTT topics: {}", e);
+                time::sleep(std::time::Duration::from_secs(5)).await;
+                continue;
+            }
+
+            loop {
+                match client.recv().await {
+                    Some(msg) => {
+                        let mut mqtt_state = state.mqtt.lock().await;
+                        match msg {
+                            MqttMsg::Contrat(contrat) => mqtt_state.contrat = Some(contrat),
+                            MqttMsg::CompteurActif(compteur_actif) => {
+                                mqtt_state.compteur_actif = Some(compteur_actif)
+                            }
+                            MqttMsg::PrixKwhActif(prix_kwh_actif) => {
+                                mqtt_state.prix_kwh_actif = Some(prix_kwh_actif)
+                            }
+                            MqttMsg::PrixKwh(prix_kwh) => mqtt_state.prix_kwh = Some(prix_kwh),
+                            MqttMsg::CouleurTempoAjd(couleur_ajd) => {
+                                mqtt_state.couleur_ajd = Some(couleur_ajd)
+                            }
+                            MqttMsg::CouleurTempoDemain(couleur_demain) => {
+                                mqtt_state.couleur_demain = Some(couleur_demain)
+                            }
+                        }
                     }
-                    MqttMsg::PrixKwhActif(prix_kwh_actif) => {
-                        mqtt_state.prix_kwh_actif = Some(prix_kwh_actif)
-                    }
-                    MqttMsg::PrixKwh(prix_kwh) => mqtt_state.prix_kwh = Some(prix_kwh),
-                    MqttMsg::CouleurTempoAjd(couleur_ajd) => {
-                        mqtt_state.couleur_ajd = Some(couleur_ajd)
-                    }
-                    MqttMsg::CouleurTempoDemain(couleur_demain) => {
-                        mqtt_state.couleur_demain = Some(couleur_demain)
+                    None => {
+                        log::error!(
+                            "MQTT receive channel closed, reconnecting to broker {}",
+                            state.broker
+                        );
+                        break;
                     }
                 }
             }
+
+            time::sleep(std::time::Duration::from_secs(5)).await;
         }
     })
 }
@@ -349,7 +368,10 @@ async fn handle_papp_ws(mut socket: WebSocket, state: Arc<AppState>, _user: Stri
                     break;
                 }
             }
-            None => {}
+            None => {
+                log::warn!("PApp MQTT receive channel closed for user '{}'", _user);
+                break;
+            }
         }
     }
 }

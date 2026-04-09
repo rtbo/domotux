@@ -65,19 +65,28 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
 
     let influx = influx::Client::new(influx_cfg);
 
-    let mut mqtt_client = mqtt::Client::<Msg>::new("wattflux", mqtt_cfg.broker);
-    mqtt_client.subscribe::<PApp>(QoS::AtMostOnce).await?;
-    mqtt_client.subscribe::<Compteurs>(QoS::AtLeastOnce).await?;
-
     loop {
-        if let Some(msg) = mqtt_client.recv().await {
-            let res = match msg {
-                Msg::PApp(power) => influx.write_papp_line(power).await,
-                Msg::Compteurs(meters) => influx.write_compteurs_line(meters).await,
-            };
-            if let Err(e) = res {
-                log::error!("Failed to publish to InfluxDB: {}", e);
+        let mut mqtt_client = mqtt::Client::<Msg>::new("wattflux", mqtt_cfg.broker.clone());
+        mqtt_client.subscribe::<PApp>(QoS::AtMostOnce).await?;
+        mqtt_client.subscribe::<Compteurs>(QoS::AtLeastOnce).await?;
+
+        loop {
+            match mqtt_client.recv().await {
+                Some(msg) => {
+                    let res = match msg {
+                        Msg::PApp(power) => influx.write_papp_line(power).await,
+                        Msg::Compteurs(meters) => influx.write_compteurs_line(meters).await,
+                    };
+                    if let Err(e) = res {
+                        log::error!("Failed to publish to InfluxDB: {}", e);
+                    }
+                }
+                None => {
+                    log::error!("MQTT receive channel closed. Reconnecting in 5s...");
+                    break;
+                }
             }
         }
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
 }
