@@ -1,63 +1,41 @@
 <template>
-  <v-stage :config="stageSize">
-    <v-layer>
-      <v-arc
-        v-for="section in sections"
-        :key="section.key"
-        :config="{
-          x: stageSize.width / 2,
-          y: stageSize.height / 2,
-          innerRadius: midRadius,
-          outerRadius: outerRadius,
-          ...section,
-        }"
-      />
-      <v-arc
-        :config="{
-          x: stageSize.width / 2,
-          y: stageSize.height / 2,
-          innerRadius: innerRadius,
-          outerRadius: midRadius,
-          angle: (props.papp / props.maxp) * (maxAngle - minAngle),
-          rotation: 90 + minAngle,
-          fill: color,
-        }"
-      />
-    </v-layer>
-    <v-layer>
-      <v-text
-        :config="{
-          x: 0,
-          y: -20,
-          width: stageSize.width,
-          height: stageSize.height,
-          text: `${props.papp} W`,
-          fontSize: 24,
-          fill: '#fff',
-          align: 'center',
-          verticalAlign: 'middle',
-        }"
-      />
-      <v-text
-        :config="{
-          x: 0,
-          y: 20,
-          width: stageSize.width,
-          height: stageSize.height,
-          text: `${hourlyCost.toFixed(2)} €/h`,
-          fontSize: 18,
-          fill: '#fff',
-          align: 'center',
-          verticalAlign: 'middle',
-        }"
-      />
-    </v-layer>
-  </v-stage>
+  <div class="power-gauge">
+    <v-stage :config="stageSize">
+      <v-layer>
+        <v-arc
+          v-for="section in sections"
+          :key="section.key"
+          :config="{
+            x: stageSize.width / 2,
+            y: stageSize.height / 2,
+            innerRadius: midRadius,
+            outerRadius: outerRadius,
+            ...section,
+          }"
+        />
+        <v-arc
+          :config="{
+            x: stageSize.width / 2,
+            y: stageSize.height / 2,
+            innerRadius: innerRadius,
+            outerRadius: midRadius,
+            angle: (props.papp / props.maxp) * (maxAngle - minAngle),
+            rotation: 90 + minAngle,
+            fill: color,
+          }"
+        />
+      </v-layer>
+    </v-stage>
+    <div class="power-gauge__overlay">
+      <div class="power-gauge__value">{{ props.papp }} W</div>
+      <div class="power-gauge__cost">{{ hourlyCost.toFixed(2) }} €/h</div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
   import { computed } from 'vue'
-  import { Arc as VArc, Layer as VLayer, Stage as VStage, Text as VText } from 'vue-konva'
+  import { Arc as VArc, Layer as VLayer, Stage as VStage } from 'vue-konva'
 
   const props = defineProps<{
     maxp: number
@@ -122,3 +100,34 @@
   })
 
 </script>
+
+<style scoped>
+  .power-gauge {
+    position: relative;
+    width: 200px;
+    height: 200px;
+  }
+
+  .power-gauge__overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    pointer-events: none;
+    text-align: center;
+    color: inherit;
+  }
+
+  .power-gauge__value {
+    font-size: 1.5rem;
+    line-height: 1.1;
+  }
+
+  .power-gauge__cost {
+    font-size: 1.125rem;
+    line-height: 1.1;
+  }
+</style>
