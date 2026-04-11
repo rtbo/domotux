@@ -130,6 +130,9 @@ macro_rules! subscribe_msg {
 
             fn translate(topic: &str, payload: &[u8]) -> anyhow::Result<Option<Self>> {
                 $(if topic == $crate::subscribe_msg!(@topic [$ty] $(<= $topic)?) {
+                        // If the payload is empty, treat it as "null" to allow using empty messages
+                        // to yield None values for Option types
+                        let payload = if payload.is_empty() { b"null" } else { payload };
                         let msg = serde_json::from_slice::<$ty>(payload)
                             .map_err(|e| anyhow::anyhow!("Failed to parse MQTT message for topic '{}': {}", $crate::subscribe_msg!(@topic [$ty] $(<= $topic)?), e))?;
                         return Ok(Some(Self::$variant(msg)));

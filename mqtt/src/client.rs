@@ -76,6 +76,8 @@ impl<S> Client<S> {
     {
         let topic = P::topic();
         let payload = serde_json::to_vec(msg)?;
+        // Option::None should yield an empty payload to allow to clear retained messages
+        let payload = if payload == b"null" { Vec::new() } else { payload };
         log::debug!("Publishing MQTT {} = {}", topic, str::from_utf8(&payload).unwrap_or("not utf8"));
         self.client.publish(topic, qos, retain, payload).await?;
         Ok(())
