@@ -1,9 +1,11 @@
+use std::time::UNIX_EPOCH;
+
 use mqtt;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    host: String,
+    pub host: String,
     token: Option<String>,
     database: String,
 }
@@ -24,6 +26,32 @@ pub struct Client {
     cfg: Config,
 }
 
+pub trait AsLine {
+    fn as_line(&self) -> String;
+}
+
+impl AsLine for &(mqtt::topics::PApp, std::time::SystemTime) {
+    fn as_line(&self) -> String {
+        format!("papp value={} {}", self.0.0, self.1.duration_since(UNIX_EPOCH).unwrap().as_secs())
+    }
+}
+
+impl AsLine for mqtt::topics::Compteurs {
+    fn as_line(&self) -> String {
+        let mut line = String::new();
+        if let Some(active) = &self.active {
+            line.push_str(&format!("active=\"{}\"", active));
+        }
+        for (key, value) in self.compteurs.iter() {
+            if !line.is_empty() {
+                line.push(',');
+            }
+            line.push_str(&format!("{}={}u", key, value));
+        }
+        format!("compteurs {}", line)
+    }
+}
+
 impl Client {
     pub fn new(cfg: Config) -> Self {
         Client {
@@ -32,36 +60,11 @@ impl Client {
         }
     }
 
-    pub async fn write_papp_line(&self, papp: mqtt::topics::PApp) -> anyhow::Result<()> {
-        let line = format!("papp value={}", papp.0);
-        self.write_line(line).await?;
-        Ok(())
-    }
-
-    pub async fn write_compteurs_line(
-        &self,
-        compteurs: mqtt::topics::Compteurs,
-    ) -> anyhow::Result<()> {
-        let mut line = String::new();
-        if let Some(active) = &compteurs.active {
-            line.push_str(&format!("active=\"{}\"", active));
-        }
-        for (key, value) in compteurs.compteurs.iter() {
-            if !line.is_empty() {
-                line.push(',');
-            }
-            line.push_str(&format!("{}={}u", key, value));
-        }
-        if line.is_empty() {
-            anyhow::bail!("No meter data to write");
-        }
-
-        let line = format!("compteurs {}", line);
-        self.write_line(line).await?;
-        Ok(())
-    }
-
-    async fn write_line(&self, line: String) -> anyhow::Result<()> {
+    pub async fn write_lines<L>(&self, lines: L) -> anyhow::Result<()>
+    where
+        L: IntoIterator,
+        L::Item: AsLine,
+    {
         let query = [("db", self.cfg.database.as_str()), ("precision", "s")];
 
         let mut req = self
@@ -73,10 +76,22 @@ impl Client {
             req = req.bearer_auth(token);
         }
 
+
+        let mut lines = lines.into_iter().map(|line| line.as_line());
+        let mut body = String::new();
+        body.push_str(&lines.next().ok_or_else(|| anyhow::anyhow!("No lines to write"))?);
+        let mut cnt = 1;
+        for line in lines {
+            body.push('\n');
+            body.push_str(&line);
+            cnt += 1;
+        }
+        log::debug!("Writing {} lines to InfluxDB", cnt);
+
         let res = req
             .header("Content-Type", "text/plain; charset=utf-8")
             .header("Accept", "application/json")
-            .body(line)
+            .body(body)
             .send()
             .await?;
 

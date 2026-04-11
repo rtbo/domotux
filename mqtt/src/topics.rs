@@ -23,6 +23,23 @@ impl Topic for PApp {
     }
 }
 
+/// When true, tells the wattflux service to drain its buffer of PApp values and stop buffering.
+/// Use this when you need live PApp values history in influxdb
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WattFluxDrain(pub bool);
+
+impl From<bool> for WattFluxDrain {
+    fn from(value: bool) -> Self {
+        Self(value)
+    }
+}
+
+impl Topic for WattFluxDrain {
+    fn topic() -> &'static str {
+        "domotux/wattflux/drain"
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum CouleurTempo {
     Bleu,
