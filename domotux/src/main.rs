@@ -8,10 +8,19 @@ mod db;
 mod service;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+enum WeekStart {
+    Monday,
+    Sunday,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     broker: mqtt::BrokerAddress,
     bind_addr: String,
     tls: Option<TlsConfig>,
+    day_start: Option<base::DayTime>,
+    week_start: WeekStart,
+    influx: influx::Config,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,6 +35,9 @@ impl Default for Config {
             broker: Default::default(),
             bind_addr: "0.0.0.0:3030".to_string(),
             tls: None,
+            day_start: Some("06:00".parse().unwrap()),
+            week_start: WeekStart::Monday,
+            influx: influx::Config::default(),
         }
     }
 }

@@ -8,10 +8,13 @@ no-secret = []
 
 [dependencies]
 base.workspace = true
+influx.workspace = true
 mqtt.workspace = true
+tarifs-cre.workspace = true
 
 anyhow.workspace = true
 axum.workspace = true
+chrono.workspace = true
 clap.workspace = true
 dirs.workspace = true
 log.workspace = true
@@ -29,3 +32,4 @@ hmac = "0.12.1"
 tower-http = { version = "0.6.8", features = ["cors", "fs", "trace"] }
 tracing-subscriber = "0.3.23"
 axum-server = { version = "0.8.0", features = ["tls-rustls"] }
+humantime-serde = "1.1.1"

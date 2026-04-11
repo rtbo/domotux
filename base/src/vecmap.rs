@@ -56,6 +56,10 @@ impl<T> VecMap<T> {
     pub fn iter(&self) -> impl Iterator<Item = &(String, T)> {
         self.0.iter()
     }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut (String, T)> {
+        self.0.iter_mut()
+    }
 }
 
 impl<T> serde::ser::Serialize for VecMap<T>

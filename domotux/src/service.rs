@@ -24,9 +24,11 @@ use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-use crate::db;
+use crate::{WeekStart, db};
 
+mod conso_stats;
 mod jwt;
+mod tarifs_db;
 
 /// MQTT state shared across handlers
 /// This include only the latest values received for "slow" topics.
@@ -47,6 +49,9 @@ pub struct AppState {
     broker: mqtt::BrokerAddress,
     secret_key: String,
     mqtt: sync::Mutex<MqttState>,
+    influx: influx::Client,
+    day_start: base::DayTime,
+    week_start: WeekStart,
 }
 
 pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
@@ -67,11 +72,19 @@ pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
 
     let secret_key = generate_secret_key();
 
+    let day_start = config.day_start.unwrap_or_else(|| {
+        log::warn!("No day start time configured, defaulting to 06:00");
+        base::DayTime::new(6, 0, 0).unwrap()
+    });
+
     let state = Arc::new(AppState {
         db,
         broker: config.broker.clone(),
         secret_key,
         mqtt: sync::Mutex::new(MqttState::default()),
+        day_start,
+        week_start: config.week_start.clone(),
+        influx: influx::Client::new(config.influx.clone()),
     });
 
     mqtt_loop(state.clone());
@@ -89,6 +102,7 @@ pub async fn start(config: &crate::Config) -> anyhow::Result<()> {
         .route("/v1/check_auth", get(check_auth))
         .route("/v1/papp_ws", any(papp_ws))
         .route("/v1/info_contrat", get(get_info_contrat))
+        .route("/v1/conso_stats", get(conso_stats::get_conso_stats))
         .layer(cors)
         .layer(
             TraceLayer::new_for_http()
@@ -135,7 +149,7 @@ fn generate_secret_key() -> String {
     {
         assert!(
             false,
-            "The 'no-secret' feature should only be used in debug mode for testing purposes"
+            "The 'no-secret' feature can only be used in debug mode for testing purposes"
         );
     }
     "not-so-secret".to_string()
@@ -208,6 +222,9 @@ fn mqtt_loop(state: Arc<AppState>) -> task::JoinHandle<()> {
         }
     })
 }
+
+const INTERNAL_SERVER_ERROR: (StatusCode, &'static str) =
+    (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error");
 
 fn internal_server_error() -> (StatusCode, String) {
     (

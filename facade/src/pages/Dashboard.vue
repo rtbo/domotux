@@ -29,11 +29,17 @@
         />
       </v-col>
     </v-row>
+    <v-row>
+      <v-col cols="12">
+        <ConsoStats />
+      </v-col>
+    </v-row>
   </v-container>
 </template>
 
 <script setup lang="ts">
   import { computed, onBeforeUnmount } from 'vue'
+  import ConsoStats from '@/components/ConsoStats.vue'
   import PowerGauge from '@/components/PowerGauge.vue'
   import TempoCard from '@/components/TempoCard.vue'
   import { useContratStore, usePappStore } from '@/stores/dashboard'
