@@ -283,28 +283,6 @@ async fn migrate_table_chunk(
 
         line_file.write_all(line.as_bytes()).await?;
         line_file.write_all(b"\n").await?;
-
-        // let query = [("db", config.database.as_str()), ("precision", "s")];
-        // let mut req = client
-        //     .post(&format!("{}/api/v3/write_lp", config.host))
-        //     .query(&query);
-
-        // if let Some(token) = &config.token {
-        //     req = req.bearer_auth(token);
-        // }
-
-        // let res = req
-        //     .header("Content-Type", "text/plain; charset=utf-8")
-        //     .header("Accept", "application/json")
-        //     .body(line)
-        //     .send()
-        //     .await?;
-
-        // if !res.status().is_success() {
-        //     let status = res.status();
-        //     let text = res.text().await.unwrap_or_default();
-        //     anyhow::bail!("InfluxDB write failed with status {}: {}", status, text);
-        // }
     }
 
     Ok(())
