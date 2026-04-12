@@ -7,8 +7,6 @@ use mqtt::topics::{Compteurs, PApp, WattFluxDrain};
 use mqtt::{self, QoS};
 use serde::{Deserialize, Serialize};
 
-mod influx;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MqttConfig {
     broker: mqtt::BrokerAddress,

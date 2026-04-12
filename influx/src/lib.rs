@@ -1,13 +1,12 @@
 use std::time::UNIX_EPOCH;
 
-use mqtt;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub host: String,
-    token: Option<String>,
-    database: String,
+    pub token: Option<String>,
+    pub database: String,
 }
 
 impl Default for Config {
@@ -20,19 +19,17 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug)]
-pub struct Client {
-    http: reqwest::Client,
-    cfg: Config,
-}
-
 pub trait AsLine {
     fn as_line(&self) -> String;
 }
 
 impl AsLine for &(mqtt::topics::PApp, std::time::SystemTime) {
     fn as_line(&self) -> String {
-        format!("papp value={} {}", self.0.0, self.1.duration_since(UNIX_EPOCH).unwrap().as_secs())
+        format!(
+            "papp value={} {}",
+            self.0.0,
+            self.1.duration_since(UNIX_EPOCH).unwrap().as_secs()
+        )
     }
 }
 
@@ -50,6 +47,12 @@ impl AsLine for mqtt::topics::Compteurs {
         }
         format!("compteurs {}", line)
     }
+}
+
+#[derive(Debug)]
+pub struct Client {
+    http: reqwest::Client,
+    cfg: Config,
 }
 
 impl Client {
@@ -76,17 +79,17 @@ impl Client {
             req = req.bearer_auth(token);
         }
 
-
         let mut lines = lines.into_iter().map(|line| line.as_line());
         let mut body = String::new();
-        body.push_str(&lines.next().ok_or_else(|| anyhow::anyhow!("No lines to write"))?);
-        let mut cnt = 1;
+        body.push_str(
+            &lines
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("No lines to write"))?,
+        );
         for line in lines {
             body.push('\n');
             body.push_str(&line);
-            cnt += 1;
         }
-        log::debug!("Writing {} lines to InfluxDB", cnt);
 
         let res = req
             .header("Content-Type", "text/plain; charset=utf-8")
@@ -102,5 +105,32 @@ impl Client {
         }
 
         Ok(())
+    }
+
+    pub async fn fetch_json(&self, sql: &str) -> anyhow::Result<Vec<u8>> {
+        let query = [
+            ("format", "json"),
+            ("q", sql),
+            ("db", self.cfg.database.as_str()),
+        ];
+
+        let mut req = self
+            .http
+            .get(&format!("{}/api/v3/query_sql", self.cfg.host))
+            .query(&query);
+
+        if let Some(token) = &self.cfg.token {
+            req = req.bearer_auth(token);
+        }
+
+        let res = req.send().await?;
+
+        if !res.status().is_success() {
+            let status = res.status();
+            let text = res.text().await.unwrap_or_default();
+            anyhow::bail!("InfluxDB query failed with status {}: {}", status, text);
+        }
+
+        Ok(res.bytes().await?.to_vec())
     }
 }
