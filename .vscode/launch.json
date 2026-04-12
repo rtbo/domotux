@@ -18,11 +18,13 @@
             "request": "launch",
             "cargo": {
                 "args": [
-                    "build",
-                    "--bin=domotux",
+                    "run",
                     "--package=domotux",
                     "--features=no-secret"
                 ]
+            },
+            "env": {
+                "RUST_LOG": "domotux=debug"
             },
             "args": []
         },
