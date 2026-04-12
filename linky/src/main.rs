@@ -59,7 +59,7 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
         publish: publish_cfg,
     } = config;
 
-    let mut mqtt_client = publish::Client::new(publish_cfg);
+    let mut mqtt_client = publish::Client::new(publish_cfg.clone());
 
     let (tx, mut rx) = sync::mpsc::channel(100);
     let mut tic_handle = tokio::spawn(async move { tic::read_loop(tic_cfg, tx).await });
@@ -68,8 +68,15 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
         tokio::select! {
             Some(tic_frame) = rx.recv() => {
                 log::debug!("Received TIC frame");
-                if let Err(e) = mqtt_client.publish(tic_frame).await {
+                if let Err(e) = mqtt_client.publish(&tic_frame).await {
                     log::warn!("Failed to publish MQTT message: {}", e);
+                    log::warn!("Attempting to reconnect MQTT client...");
+                    mqtt_client = publish::Client::new(publish_cfg.clone());
+                    if let Err(e) = mqtt_client.publish(&tic_frame).await {
+                        log::error!("Failed to publish MQTT message after reconnect: {}", e);
+                    } else {
+                        log::info!("Successfully published MQTT message after reconnect");
+                    }
                 }
             }
             result = &mut tic_handle => {

@@ -120,7 +120,7 @@ impl Client {
         }
     }
 
-    pub async fn publish(&mut self, tic_frame: Vec<(String, tic::Value)>) -> anyhow::Result<()> {
+    pub async fn publish(&mut self, tic_frame: &[(String, tic::Value)]) -> anyhow::Result<()> {
         self.publish_papp(&tic_frame).await?;
         self.publish_compteurs(&tic_frame).await?;
         if !self.config.tempo.skip_demain {
