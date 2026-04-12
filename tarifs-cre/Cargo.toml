@@ -16,3 +16,4 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+chrono-tz = "0.10.4"

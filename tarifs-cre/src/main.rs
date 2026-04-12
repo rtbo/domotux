@@ -8,10 +8,7 @@ use mqtt::QoS;
 use mqtt::topics::{CompteurActif, Contrat, PrixKwhActif};
 use serde::{Deserialize, Serialize};
 
-use crate::cre::fetch_kwh_price;
-
-mod cre;
-mod tabular;
+use tarifs_cre::fetch_kwh_price;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Config {
