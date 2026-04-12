@@ -17,7 +17,7 @@ impl Default for MqttConfig {
     fn default() -> Self {
         Self {
             broker: mqtt::BrokerAddress::default(),
-            papp_buffer: Some(1000),
+            papp_buffer: Some(10),
         }
     }
 }
@@ -41,6 +41,9 @@ struct Cli {
 
     #[clap(long)]
     influx_host: Option<String>,
+
+    #[clap(long)]
+    papp_buffer: Option<usize>,
 }
 
 #[tokio::main]
@@ -78,6 +81,9 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
     if let Some(influx_host) = cli.influx_host {
         config.influx.host = influx_host;
     }
+    if let Some(papp_buffer) = cli.papp_buffer {
+        config.mqtt.papp_buffer = Some(papp_buffer);
+    }
     log::info!("Starting with config: {:#?}", config);
 
     let Config {
@@ -90,7 +96,6 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
     let buf_size = mqtt_cfg.papp_buffer.unwrap_or(0);
     log::info!("Using a buffer size of {} for PApp messages", buf_size);
     let mut papp_buffer = VecDeque::<(PApp, std::time::SystemTime)>::with_capacity(buf_size);
-
     let mut drain_requested = false;
 
     loop {
@@ -107,12 +112,19 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
                     let res = match msg {
                         Msg::PApp(papp) => {
                             if papp_buffer.len() >= buf_size {
-                                log::warn!("PApp buffer overflow: buffer size is {}, but it has {} entries. Oldest entry will be dropped.", buf_size, papp_buffer.len());
+                                log::warn!(
+                                    "PApp buffer overflow: buffer size is {}, but it has {} entries. Oldest entry will be dropped.",
+                                    buf_size,
+                                    papp_buffer.len()
+                                );
                                 papp_buffer.pop_front();
                             }
                             papp_buffer.push_back((papp, std::time::SystemTime::now()));
-                            if drain_requested || papp_buffer.len() >= buf_size
-                            {
+                            if drain_requested || papp_buffer.len() >= buf_size {
+                                log::debug!(
+                                    "Flushing PApp buffer to InfluxDB ({} entries)",
+                                    papp_buffer.len()
+                                );
                                 match influx.write_lines(papp_buffer.iter()).await {
                                     Ok(_) => {
                                         papp_buffer.clear();
@@ -124,11 +136,18 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
                                 Ok(())
                             }
                         }
-                        Msg::Compteurs(meters) => influx.write_lines(Some(meters)).await,
+                        Msg::Compteurs(meters) => {
+                            log::debug!("Sending Compteurs to InfluxDB");
+                            influx.write_lines(Some(meters)).await
+                        }
                         Msg::WattFluxDrain(drain) => {
                             log::debug!("Received drain request: {:?}", drain);
                             drain_requested = drain.map(|d| d.0).unwrap_or(false);
                             if drain_requested && !papp_buffer.is_empty() {
+                                log::debug!(
+                                    "Flushing PApp buffer to InfluxDB ({} entries)",
+                                    papp_buffer.len()
+                                );
                                 match influx.write_lines(papp_buffer.iter()).await {
                                     Ok(_) => {
                                         papp_buffer.clear();
@@ -152,6 +171,10 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
             }
         }
         if !papp_buffer.is_empty() {
+            log::debug!(
+                "Flushing PApp buffer to InfluxDB ({} entries)",
+                papp_buffer.len()
+            );
             if !influx.write_lines(papp_buffer.iter()).await.is_err() {
                 papp_buffer.clear();
             }
