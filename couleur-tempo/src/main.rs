@@ -132,7 +132,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         let sleep_dur = config
             .fetch_times
             .iter()
-            .map(base::DayTime::duration_until)
+            .map(base::DayTime::duration_now_til_next)
             .min()
             .unwrap();
         log::info!("Sleeping for {} seconds", sleep_dur.as_secs());

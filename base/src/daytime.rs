@@ -30,7 +30,12 @@ impl DayTime {
         (self.0 % 60000) / 1000
     }
 
-    pub fn duration_until(&self) -> std::time::Duration {
+    pub fn millis(&self) -> u32 {
+        self.0 % 1000
+    }
+
+    /// Duration from now until the next occurrence of this time of the day
+    pub fn duration_now_til_next(&self) -> std::time::Duration {
         let now = DayTime::from(std::time::SystemTime::now());
         let milliseconds_until = if self.0 >= now.0 {
             self.0 - now.0
@@ -38,6 +43,31 @@ impl DayTime {
             24 * 3600 * 1000 - (now.0 - self.0)
         };
         std::time::Duration::from_millis(milliseconds_until as u64)
+    }
+
+    pub fn duration_prev_til_now(&self) -> std::time::Duration {
+        let now = DayTime::from(std::time::SystemTime::now());
+        let milliseconds_until = if now.0 >= self.0 {
+            now.0 - self.0
+        } else {
+            24 * 3600 * 1000 - (now.0 - self.0)
+        };
+        std::time::Duration::from_millis(milliseconds_until as u64)
+    }
+
+    pub fn with_datetime(&self, datetime: chrono::DateTime<Local>) -> chrono::DateTime<Local> {
+        let date = datetime.date_naive();
+        let time = chrono::NaiveTime::from_hms_milli_opt(
+            self.hours(),
+            self.minutes(),
+            self.seconds(),
+            self.millis(),
+        )
+        .unwrap();
+
+        date.and_time(time)
+            .and_local_timezone(Local)
+            .unwrap()
     }
 }
 
@@ -78,8 +108,17 @@ impl fmt::Display for DayTime {
 impl From<std::time::SystemTime> for DayTime {
     fn from(time: std::time::SystemTime) -> Self {
         let datetime = chrono::DateTime::<Local>::from(time);
-        let milliseconds_since_midnight = datetime.num_seconds_from_midnight() * 1000
-            + datetime.nanosecond() / 1_000_000;
+        let milliseconds_since_midnight =
+            datetime.num_seconds_from_midnight() * 1000 + datetime.nanosecond() / 1_000_000;
+        DayTime(milliseconds_since_midnight)
+    }
+}
+
+impl From<chrono::NaiveTime> for DayTime {
+    fn from(time: chrono::NaiveTime) -> Self {
+        let milliseconds_since_midnight = (time.hour() * 3600 + time.minute() * 60 + time.second())
+            * 1000
+            + time.nanosecond() / 1_000_000;
         DayTime(milliseconds_since_midnight)
     }
 }
