@@ -7,7 +7,7 @@ members = [
     "influx",
     "linky",
     "mqtt",
-    "tarifs-cre",
+    "tarifs-cre", "tools/import-compteurs",
     "tools/mig_influx",
     "wattflux",
 ]

@@ -1,0 +1,11 @@
+[package]
+name = "import-compteurs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap.workspace = true
+chrono.workspace = true
+serde.workspace = true
+
+csv = "1.4.0"
