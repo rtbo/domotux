@@ -287,9 +287,14 @@ async fn get_conso_period(
                 .compteurs
                 .get(key)
                 .ok_or_else(|| anyhow::anyhow!("Compteur '{}' not found in end compteurs", key))?;
+            debug_assert!(
+                end_wh >= start_wh,
+                "End compteur value should be greater than or equal to start value for compteur '{}'",
+                key
+            );
             let kwh = (*end_wh - *start_wh) as f32 / 1000.0;
             let price = period.price.get(key).cloned().unwrap_or(0.0);
-            log::debug!("Compteur '{}': {} kWh at price {} €/kWh", key, kwh, price,);
+            log::trace!("Compteur '{}': {} kWh ({} - {}) at price {} €/kWh", key, kwh, start_wh / 1000, end_wh / 1000, price);
             compteur.cost += kwh * price;
         }
     }
@@ -347,8 +352,8 @@ async fn get_compteurs_near(
         time_utc: DateTime<Utc>,
     }
     let timestamp = timestamp.with_timezone(&Utc);
-    let start = timestamp - chrono::Duration::minutes(5);
-    let end = timestamp + chrono::Duration::minutes(5);
+    let start = timestamp - chrono::Duration::hours(24);
+    let end = timestamp + chrono::Duration::hours(24);
     let sql = format!(
         "SELECT *, time AT TIME ZONE 'UTC' as time_utc FROM compteurs WHERE time >= '{}' AND time <= '{}' ORDER BY time ASC",
         start.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
@@ -360,23 +365,49 @@ async fn get_compteurs_near(
     let json = client.fetch_json(&sql).await?;
     let compteurs_entries: Vec<Entry> = serde_json::from_slice(&json)?;
 
-    let mut dur = chrono::Duration::MAX;
+    let mut compteurs_bef = None;
+    let mut compteurs_aft = None;
     let mut compteurs = None;
-    let mut time = None;
     for entry in compteurs_entries {
-        let d = (entry.time_utc - timestamp).num_seconds().abs();
-        if d < dur.num_seconds() {
-            dur = chrono::Duration::seconds(d);
-            time = Some(entry.time_utc);
-            compteurs = Some(entry);
+        match entry.time_utc.cmp(&timestamp) {
+            std::cmp::Ordering::Less => compteurs_bef = Some(entry),
+            std::cmp::Ordering::Equal => {
+                compteurs = Some(entry);
+                break;
+            }
+            std::cmp::Ordering::Greater => {
+                compteurs_aft = Some(entry);
+                break;
+            }
         }
     }
-    log::debug!(
-        "Closest compteurs to {} is at {} ({} seconds away)",
-        timestamp,
-        time.unwrap_or_else(|| timestamp),
-        dur.num_seconds()
-    );
 
-    Ok(compteurs.map(|c| c.compteurs))
+    match (compteurs_bef, compteurs, compteurs_aft) {
+        (_, Some(entry), _) => Ok(Some(entry.compteurs)),
+        (Some(bef), None, Some(aft)) => {
+            let span = aft.time_utc - bef.time_utc;
+            let to_bef = timestamp - bef.time_utc;
+            let ratio = to_bef.as_seconds_f64() / span.as_seconds_f64();
+            debug_assert!(ratio >= 0.0 && ratio <= 1.0, "Ratio should be between 0 and 1, got {}", ratio);
+
+            let mut compteurs = bef.compteurs.clone();
+            for (key, compteur) in compteurs.compteurs.iter_mut() {
+                let bef_value = *compteur;
+                let aft_value = aft.compteurs.compteurs.get(key).copied().unwrap_or(0);
+                let added_value = (aft_value - bef_value) as f64 * ratio;
+                *compteur = (bef_value as f64 + added_value).round() as u32;
+                log::trace!(
+                    "Interpolating compteur '{}' between {}  and {}: {}",
+                    key,
+                    bef_value,
+                    aft_value,
+                    *compteur
+                );
+            }
+            Ok(Some(compteurs))
+        }
+        (Some(entry), None, None) => Ok(Some(entry.compteurs)),
+        (None, None, Some(entry)) => Ok(Some(entry.compteurs)),
+        (None, None, None) => Ok(None),
+    }
 }
